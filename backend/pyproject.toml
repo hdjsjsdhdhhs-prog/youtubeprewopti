@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ytlead-backend"
+version = "0.1.0"
+description = "AI YouTube Thumbnail Lead Intelligence & Outreach Platform — backend (API + worker)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi~=0.141.1",
+    "uvicorn~=0.53.0",
+    "pydantic[email]~=2.13.5",
+    "pydantic-settings~=2.15.0",
+    "sqlalchemy~=2.0.54",
+    "alembic~=1.20.0",
+    "psycopg[binary,pool]~=3.3.6",
+    "procrastinate~=3.10.0",
+    "httpx~=0.28.1",
+    "pillow~=12.3.0",
+    "numpy~=2.5.3",
+    "argon2-cffi~=25.1.0",
+    "cryptography~=50.0.1",
+    "structlog~=26.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest~=9.1.1",
+    "pytest-asyncio~=1.4.0",
+    "respx",
+    "hypothesis",
+    "ruff~=0.16.8",
+    "mypy~=2.3.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "S", "SIM"]
+ignore = ["S101", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S311"]
+"alembic/**" = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning:procrastinate.*"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+warn_unused_ignores = true

@@ -1,0 +1,3991 @@
+Ты — Cloud Opus 5.5 , выступающий не просто как генератор кода, а как senior product architect, AI systems engineer, full-stack engineer, data engineer и UX architect.
+
+Твоя задача — спроектировать и реализовать полноценную self-hosted платформу для поиска потенциальных клиентов среди YouTube-каналов, которым потенциально нужны более качественные превью, с автоматическим парсингом, аналитикой каналов, AI-анализом превью, интеллектуальным отбором лидов, генерацией персонализированных бесплатных превью, генерацией коммерческих предложений и отправкой сообщений только после моего ручного подтверждения.
+
+Это НЕ должен быть поверхностный клон https://autoflow2.ru/. 
+
+AutoFlow используй только как концептуальный референс: поиск → фильтрация → анализ → персонализация → коммуникация → автоматизация.
+
+Моя система должна быть значительно глубже и специализирована именно под рынок услуг по созданию YouTube-превью.
+
+Главная цель продукта:
+
+Найти на YouTube каналы, которым потенциально нужны новые/более качественные превью, отфильтровать их по моим критериям, автоматически проанализировать их визуальную упаковку, дать каждому каналу структурированный AI-скоринг, позволить мне вручную выбрать подходящих лидов, затем автоматически подготовить персонализированное коммерческое предложение и при необходимости создать для конкретного автора несколько вариантов бесплатного превью на основе анализа его текущих роликов.
+
+Система должна работать по принципу Human-in-the-Loop:
+
+AI выполняет большую часть исследования и подготовки работы, но окончательное решение о том, кому и что отправлять, остаётся за мной.
+
+---
+
+1. ОСНОВНАЯ ЛОГИКА ПРОДУКТА
+
+---
+
+Основной pipeline:
+
+1. Я задаю ниши / поисковые запросы / тематики.
+2. Система ищет YouTube-каналы.
+3. Система собирает данные о каналах и видео.
+4. Система фильтрует каналы по заданным критериям.
+5. Система скачивает/получает превью релевантных видео.
+6. AI анализирует превью.
+7. Каждому превью присваивается структурированный score.
+8. На основании превью и канала рассчитывается итоговый lead score.
+9. Я могу дополнительно фильтровать и сортировать лидов.
+10. Я выбираю интересующие каналы.
+11. AI формирует анализ конкретного канала.
+12. Я могу дать дополнительные инструкции, референсы и ограничения для генерации.
+13. AI генерирует несколько вариантов бесплатного превью.
+14. Я выбираю/одобряю нужные варианты.
+15. AI анализирует автора и канал и составляет персонализированный оффер.
+16. Оффер, сообщение и бесплатное превью попадают в очередь на моё ручное подтверждение.
+17. После моего подтверждения система отправляет сообщение через выбранный канал коммуникации.
+18. Система сохраняет всю историю контакта.
+19. Система отслеживает статусы, ответы, конверсии и результаты.
+
+Это должен быть замкнутый pipeline:
+
+Discovery → Enrichment → Filtering → Thumbnail Analysis → Lead Scoring → Human Selection → Thumbnail Generation → Offer Generation → Human Approval → Outreach → Tracking → Analytics.
+
+---
+
+2. ПОИСК YOUTUBE-КАНАЛОВ
+
+---
+
+Нужен мощный модуль discovery.
+
+Я должен иметь возможность создавать поисковые проекты / кампании.
+
+Для каждого проекта:
+
+- название;
+- описание;
+- список ниш;
+- список поисковых запросов;
+- язык;
+- страна/рынок;
+- количество результатов;
+- глубина поиска;
+- период публикации;
+- количество последних видео для анализа;
+- настройки фильтрации.
+
+Я должен иметь возможность загрузить очень большое количество ниш и поисковых запросов.
+
+Например:
+
+Gaming
+Finance
+Business
+Cars
+Crypto
+Education
+Fitness
+Psychology
+Construction
+Technology
+
+Или сотни/тысячи более узких запросов.
+
+Система должна уметь:
+
+- искать каналы по ключевым словам;
+- искать каналы по тематике;
+- искать через связанные YouTube-видео;
+- извлекать channel ID;
+- определять дубликаты;
+- объединять одинаковые каналы из разных поисковых запросов;
+- сохранять источник обнаружения канала;
+- сохранять, по какой нише/запросу канал был найден.
+
+Каждому каналу присваивать:
+
+- channel_id;
+- URL;
+- handle;
+- название;
+- описание;
+- страна;
+- язык;
+- дата создания;
+- количество подписчиков;
+- общее количество просмотров;
+- количество видео;
+- дата последнего видео;
+- дата первого видео;
+- частота публикаций;
+- категории;
+- предполагаемая ниша;
+- набор тематических тегов.
+
+---
+
+3. ФИЛЬТРЫ
+
+---
+
+Нужна очень мощная система фильтрации.
+
+Минимальные фильтры:
+
+Подписчики:
+
+- min;
+- max.
+
+Просмотры:
+
+- средние просмотры;
+- медианные просмотры;
+- просмотры последнего видео;
+- диапазон просмотров;
+- просмотры последних N видео.
+
+Активность:
+
+- видео за 7 дней;
+- видео за 30 дней;
+- видео за 90 дней;
+- средняя частота публикаций;
+- количество дней с момента последней публикации.
+
+Дата последнего видео:
+
+- не старше X дней.
+
+Ниша:
+
+- включить;
+- исключить.
+
+Тематика:
+
+- включить;
+- исключить.
+
+Количество видео:
+
+- min;
+- max.
+
+Дополнительно рассчитать:
+
+views/subscribers ratio;
+
+median views/subscribers ratio;
+
+recent views velocity;
+
+average recent views;
+
+views trend;
+
+upload consistency;
+
+channel growth indicators, если соответствующие данные доступны.
+
+Пример:
+
+Я задаю:
+
+Ниша:
+Business
+
+Подписчики:
+5 000–200 000
+
+Средние просмотры:
+10 000+
+
+Последнее видео:
+не старше 14 дней
+
+Активность:
+минимум 2 видео в месяц
+
+И система должна вернуть только подходящие каналы.
+
+---
+
+4. АНАЛИЗ КАНАЛА
+
+---
+
+После discovery каждый канал должен иметь отдельную страницу.
+
+На странице:
+
+Общая информация:
+
+- название;
+- avatar;
+- URL;
+- handle;
+- подписчики;
+- просмотры;
+- количество видео;
+- страна;
+- язык;
+- ниша;
+- тематика.
+
+Performance:
+
+- средние просмотры;
+- медианные просмотры;
+- последние 10 видео;
+- последние 20 видео;
+- изменение просмотров;
+- частота публикаций.
+
+Thumbnail Overview:
+
+- количество проанализированных превью;
+- средний score;
+- медианный score;
+- лучший thumbnail;
+- худший thumbnail;
+- процент слабых thumbnail;
+- процент средних;
+- процент сильных.
+
+Отдельно показывать:
+
+“Visual Opportunity”
+
+То есть оценку того, насколько очевидна возможность улучшить превью канала.
+
+Например:
+
+Thumbnail Quality: 4.8/10
+Visual Opportunity: HIGH
+
+Это должно помогать понимать, стоит ли вообще предлагать автору услуги.
+
+---
+
+5. ПОЛУЧЕНИЕ И ХРАНЕНИЕ ПРЕВЬЮ
+
+---
+
+Система должна сохранять превью каждого релевантного видео.
+
+У каждой thumbnail-записи:
+
+- video_id;
+- channel_id;
+- original URL;
+- local/object storage path;
+- width;
+- height;
+- format;
+- upload date;
+- video title;
+- video views;
+- analysis status;
+- analysis score;
+- analysis JSON;
+- generated variants;
+- timestamps.
+
+Нужен deduplication.
+
+Одно и то же изображение не должно повторно анализироваться без необходимости.
+
+Нужен cache.
+
+Если thumbnail уже анализировался, использовать сохранённый результат, а не тратить API-вызов повторно.
+
+---
+
+6. AI-АНАЛИЗ ПРЕВЬЮ
+
+---
+
+Это один из центральных модулей системы.
+
+AI должен не просто говорить:
+
+“превью хорошее/плохое”.
+
+Мне нужен структурированный профессиональный аудит.
+
+Для каждого thumbnail AI должен анализировать:
+
+1. Визуальную иерархию.
+2. Композицию.
+3. Контраст.
+4. Цветовую схему.
+5. Читаемость текста.
+6. Размер и положение текста.
+7. Читаемость на маленьком экране.
+8. Силу главного объекта.
+9. Использование лица/эмоции.
+10. Background separation.
+11. Depth.
+12. Focal point.
+13. Clutter.
+14. Информационную нагрузку.
+15. Соответствие теме видео.
+16. CTR-oriented composition.
+17. Отличимость среди конкурентов в нише.
+18. Брендовую целостность канала.
+19. Потенциал редизайна.
+20. Основные ошибки.
+21. Что конкретно следует изменить.
+
+Но анализ должен быть разделён на объективные визуальные характеристики и AI-оценку.
+
+Не выдавать псевдонаучную гарантию:
+
+“Это увеличит CTR на 37%”.
+
+Вместо этого:
+
+“Вероятный визуальный потенциал улучшения: высокий”.
+
+---
+
+7. SCORE-СИСТЕМА
+
+---
+
+Каждому thumbnail дать общий score от 1 до 10.
+
+Дополнительно:
+
+Composition Score: 1–10
+Contrast Score: 1–10
+Text Score: 1–10
+Hierarchy Score: 1–10
+Subject Score: 1–10
+Color Score: 1–10
+Mobile Readability: 1–10
+Topic Relevance: 1–10
+Visual Impact: 1–10
+Professionalism: 1–10
+Redesign Potential: 1–10
+
+Общий score должен рассчитываться детерминированно на основании этих компонентов.
+
+Например:
+
+overall_score =
+weighted_sum(subscores)
+
+Все веса должны быть конфигурируемыми.
+
+Крайне важно:
+
+AI должен возвращать строго структурированный JSON.
+
+Например:
+
+{
+"overall_score": 6.4,
+"composition_score": 5.5,
+"contrast_score": 7.1,
+"text_score": 4.8,
+"hierarchy_score": 5.2,
+"subject_score": 7.4,
+"color_score": 6.8,
+"mobile_readability": 4.9,
+"topic_relevance": 8.2,
+"visual_impact": 6.0,
+"professionalism": 5.9,
+"redesign_potential": 8.7,
+"problems": [],
+"recommendations": [],
+"visual_summary": "",
+"improvement_opportunity": "high"
+}
+
+Не хранить AI-анализ только как обычный текст.
+
+Он должен быть структурированным и машинно-фильтруемым.
+
+---
+
+8. AI LEAD SCORE
+
+---
+
+Отдельно от thumbnail score нужен Lead Score.
+
+Он оценивает не качество одной картинки, а коммерческую ценность потенциального клиента.
+
+Например:
+
+Channel Fit
+Thumbnail Weakness
+Audience Size
+Views
+Activity
+Growth Signals
+Contact Availability
+Niche Value
+Redesign Opportunity
+
+Итог:
+
+Lead Score: 87/100
+
+При этом score должен быть объяснимым.
+
+Например:
+
+Thumbnail Opportunity: 23/25
+Channel Fit: 20/20
+Audience: 15/20
+Activity: 18/20
+Contactability: 11/15
+
+---
+
+9. НАСТРОЙКИ МОЕГО ОТБОРА
+
+---
+
+Я должен иметь интерфейс, в котором могу установить:
+
+Thumbnail score:
+от 1 до 10
+
+Например:
+
+показывать только:
+≤ 5.5
+
+или:
+
+от 1 до 6
+
+или:
+
+3–5
+
+Lead Score:
+
+например:
+70–100.
+
+Также:
+
+Subscribers:
+5k–100k
+
+Views:
+10k+
+
+Activity:
+active
+
+Last video:
+≤ 14 days
+
+И все фильтры должны работать одновременно.
+
+Нужна сортировка:
+
+- по Thumbnail Score;
+- по Lead Score;
+- по просмотрам;
+- по подписчикам;
+- по активности;
+- по Visual Opportunity;
+- по Contactability;
+- по дате последнего видео;
+- по потенциальной коммерческой ценности.
+
+---
+
+10. HUMAN-IN-THE-LOOP
+
+---
+
+Это принципиально важно.
+
+AI ничего не должен отправлять клиенту автоматически без моего разрешения.
+
+Должны существовать состояния:
+
+DISCOVERED
+ANALYZED
+FILTERED
+SHORTLISTED
+SELECTED
+GENERATION_PENDING
+GENERATED
+OFFER_DRAFT
+PENDING_APPROVAL
+APPROVED
+SCHEDULED
+SENT
+REPLIED
+DECLINED
+OPTED_OUT
+FAILED
+
+Вся система должна работать через state machine.
+
+---
+
+11. ОТБОР КАНАЛОВ
+
+---
+
+Я должен иметь возможность:
+
+- выбрать один канал;
+- выбрать несколько;
+- выбрать страницу;
+- выбрать все отфильтрованные;
+- снять часть выбранных;
+- добавить канал вручную;
+- импортировать канал вручную по URL.
+
+У выбранных каналов должна быть кнопка:
+
+“Prepare Offer”
+
+и:
+
+“Generate Free Thumbnail”
+
+---
+
+12. GENERATION WORKFLOW
+
+---
+
+После того как я выбрал канал, AI уже должен знать:
+
+- нишу;
+- тематику;
+- канал;
+- автора;
+- название видео;
+- существующие thumbnail;
+- score;
+- ошибки;
+- визуальный стиль канала;
+- лучшие/худшие примеры;
+- историю предыдущих генераций.
+
+Я должен иметь возможность написать:
+
+“Сделай более агрессивную композицию”
+“Сделай минималистично”
+“Без большого текста”
+“Сделай визуально дороже”
+“Нужен стиль MrBeast”
+“Добавь сильный фокус на лице”
+“Используй этот референс”
+
+Также я должен иметь возможность загрузить собственные референсы.
+
+AI должен учитывать мои инструкции + результаты анализа.
+
+---
+
+13. ГЕНЕРАЦИЯ БЕСПЛАТНЫХ ПРЕВЬЮ
+
+---
+
+После подтверждения генерации система должна создавать несколько вариантов.
+
+Например:
+
+Variant A
+Variant B
+Variant C
+Variant D
+
+Количество вариантов должно быть настраиваемым.
+
+Каждый результат должен иметь:
+
+- preview;
+- prompt;
+- model;
+- generation settings;
+- source images;
+- creation timestamp;
+- generation cost/status.
+
+Должна существовать кнопка:
+
+“Regenerate”
+
+“Create more like this”
+
+“Use as final free sample”
+
+“Reject”
+
+“Approve”
+
+---
+
+14. AI SHOULD UNDERSTAND THE DIFFERENCE BETWEEN ANALYSIS AND GENERATION
+
+---
+
+Не смешивать задачи.
+
+Analysis AI:
+изучает существующие превью и объясняет, что в них не так.
+
+Generation AI:
+создаёт новое изображение на основании анализа.
+
+Канал может выглядеть плохо по одной причине, а новое превью должно исправлять именно выявленные проблемы.
+
+Например:
+
+Current:
+мало контраста
+слабая иерархия
+мелкий текст
+фон конкурирует с персонажем
+
+Generated:
+сильный foreground
+отделённый background
+больший focal subject
+минимальный текст
+контрастный composition
+
+То есть генерация должна быть связана с аналитикой, а не случайной.
+
+---
+
+15. OPENAI IMAGE MODEL ARCHITECTURE
+
+---
+
+Использовать актуальные GPT Image модели через официальный API.
+
+Архитектура должна позволять менять модель через настройки.
+
+Предусмотреть как минимум:
+
+- GPT-Image-2.5 Flare;
+- GPT-Image-2.5 Sunburst;
+- возможность добавления новых image-моделей без переписывания бизнес-логики.
+
+Для high-volume задач использовать более экономичный/быстрый pipeline.
+
+Для финальной генерации использовать более качественный режим.
+
+Не зашивать название модели глубоко в код.
+
+Использовать AI provider abstraction:
+
+ImageProvider
+VisionProvider
+TextProvider
+
+Чтобы в будущем можно было подключить другую модель без архитектурного рефакторинга.
+
+Крайне важно:
+
+Не предполагать, что конкретная модель всегда останется актуальной.
+
+Модель должна задаваться конфигурацией.
+
+Если конкретная API-возможность недоступна для выбранной модели, система должна корректно переключаться на совместимый vision-модуль, не ломая pipeline.
+
+---
+
+16. ANALYSIS MODEL
+
+---
+
+Для сложного reasoning/vision analysis использовать отдельный multimodal reasoning layer.
+
+Его задача:
+
+- понимать содержимое thumbnail;
+- анализировать композицию;
+- сравнивать несколько thumbnail;
+- формировать structured JSON;
+- анализировать канал целиком;
+- создавать коммерческий персонализированный текст.
+
+Image generation model не должна принудительно использоваться для всех reasoning-задач.
+
+---
+
+17. СРАВНЕНИЕ ПРЕВЬЮ КАНАЛА
+
+---
+
+Очень важно добавить не только анализ каждой картинки отдельно, но и comparative analysis.
+
+AI должен видеть несколько последних thumbnail одного канала и отвечать:
+
+- повторяется ли один и тот же шаблон;
+- насколько визуал устаревший;
+- есть ли единая стилистика;
+- какие паттерны работают лучше;
+- какие визуальные элементы постоянно мешают;
+- есть ли признаки отсутствия thumbnail-дизайна;
+- какие видео выглядят особенно слабо;
+- где больше всего потенциала для redesign.
+
+Например:
+
+Channel Visual Consistency: 4/10
+Average Thumbnail Quality: 5.1/10
+Visual Opportunity: HIGH
+
+---
+
+18. CONTACT ENRICHMENT
+
+---
+
+После отбора канала система должна искать публично доступные контактные данные.
+
+Источники:
+
+- YouTube channel information;
+- description;
+- публичные ссылки;
+- website;
+- Telegram;
+- email;
+- VK;
+- Instagram;
+- другие указанные социальные сети.
+
+Необходимо хранить:
+
+contact_type
+contact_value
+source
+source_url
+confidence
+discovered_at
+verified_at
+status
+
+Например:
+
+{
+"type": "telegram",
+"value": "@example",
+"source": "youtube_about",
+"confidence": 0.94
+}
+
+Также должен быть статус:
+
+public
+verified
+unverified
+invalid
+opted_out
+
+Не пытаться обходить CAPTCHA, авторизацию, anti-bot защиту или закрытые источники.
+
+Если контакт невозможно получить законным и технически доступным способом — сохранять “not_found”.
+
+---
+
+19. CONTACT QUALITY SCORE
+
+---
+
+Каждый lead должен иметь:
+
+Contactability Score.
+
+Например:
+
+Email available: +30
+Telegram available: +30
+Website: +20
+VK: +10
+Other: +10
+
+Но итоговые веса должны быть настраиваемыми.
+
+---
+
+20. ПРОФЕССИОНАЛЬНЫЙ ОФФЕР
+
+---
+
+После получения всей информации AI должен составлять персонализированный оффер.
+
+Обычный:
+
+“Здравствуйте! Я занимаюсь созданием превью, могу сделать вам обложки.”
+
+Нужен другой подход.
+
+Оффер должен показывать, что канал действительно был изучен.
+
+Например, AI может использовать:
+
+- имя автора;
+- название канала;
+- конкретные видео;
+- существующие thumbnail;
+- выявленные визуальные проблемы;
+- конкретные рекомендации;
+- бесплатный sample thumbnail;
+- объяснение, почему именно этот sample был создан.
+
+Оффер должен строиться по принципу:
+
+OBSERVATION
+→ PROBLEM
+→ SPECIFIC INSIGHT
+→ VALUE
+→ FREE SAMPLE
+→ LOW-FRICTION CTA
+
+Но не использовать фальшивые цифры.
+
+Не придумывать:
+
+“ваше CTR упало на 27%”
+
+если таких данных нет.
+
+Можно писать:
+
+“На нескольких последних превью заметно, что главный объект недостаточно отделён от фона…”
+
+---
+
+21. ПЕРСОНАЛИЗАЦИЯ
+
+---
+
+Каждый оффер должен быть действительно уникальным.
+
+AI должен иметь доступ к:
+
+- channel profile;
+- video titles;
+- thumbnail analysis;
+- selected thumbnail;
+- creator name;
+- niche;
+- visual weaknesses;
+- generated free preview;
+- user instructions.
+
+Добавить personalisation strength score.
+
+Например:
+
+Personalization:
+92/100
+
+Показывать, какие конкретно данные были использованы.
+
+---
+
+22. ОФФЕРЫ В ОЧЕРЕДИ НА МОЁ ПОДТВЕРЖДЕНИЕ
+
+---
+
+Нужен отдельный раздел:
+
+“Approval Queue”
+
+Там карточки:
+
+Creator
+Channel
+Thumbnail
+AI Analysis
+Lead Score
+Generated Preview
+Offer Draft
+Contact Channels
+
+Кнопки:
+
+Approve
+Edit
+Regenerate
+Reject
+Skip
+Schedule
+
+До нажатия Approve никакое сообщение не отправляется.
+
+---
+
+23. РУЧНОЕ РЕДАКТИРОВАНИЕ
+
+---
+
+Я должен иметь возможность изменить:
+
+- текст;
+- subject;
+- CTA;
+- выбранный thumbnail;
+- вложение;
+- контакт;
+- канал отправки.
+
+После ручного редактирования система должна помечать оффер как:
+
+MANUALLY_EDITED
+
+---
+
+24. MULTI-CHANNEL OUTREACH
+
+---
+
+Предусмотреть адаптеры:
+
+Email
+Telegram
+VK
+и возможность добавления других каналов.
+
+Каждый канал должен быть отдельной integration.
+
+Не смешивать credentials с business logic.
+
+Например:
+
+EmailProvider
+TelegramProvider
+VKProvider
+
+Нужен единый интерфейс:
+
+send_message()
+check_status()
+handle_reply()
+handle_error()
+
+---
+
+25. TELEGRAM
+
+---
+
+Архитектура должна учитывать различия между Telegram Bot API и пользовательскими Telegram-клиентами/MTProto.
+
+Не предполагать, что обычный Bot API автоматически позволяет писать любому найденному пользователю.
+
+Система должна поддерживать законный и технически допустимый сценарий подключения Telegram-аккаунта.
+
+Для аккаунтов хранить:
+
+- account name;
+- account type;
+- status;
+- connection status;
+- session metadata;
+- rate limits;
+- cooldown;
+- sent count;
+- failed count;
+- health.
+
+Не хранить session credentials в обычной таблице открытым текстом.
+
+Использовать encrypted secrets storage.
+
+---
+
+26. MULTIPLE TELEGRAM ACCOUNTS
+
+---
+
+Я должен иметь возможность подключить несколько аккаунтов.
+
+Например:
+
+Telegram Account 1
+Telegram Account 2
+Telegram Account 3
+
+И определить:
+
+- какие кампании использует аккаунт;
+- дневной лимит;
+- cooldown;
+- расписание;
+- статус.
+
+Не делать агрессивную неконтролируемую рассылку.
+
+Нужны:
+
+rate limit
+cooldown
+daily quota
+per-account quota
+error handling
+account health
+pause on abnormal failures
+
+---
+
+27. EMAIL
+
+---
+
+Для email предусмотреть:
+
+SMTP
+или API-based email providers.
+
+Хранить:
+
+- provider;
+- sender;
+- domain;
+- credentials;
+- daily limit;
+- campaign limit;
+- bounce count;
+- reply count;
+- unsubscribe count.
+
+Поддерживать:
+
+subject A/B tests
+body A/B tests
+CTA variants
+attachment variants.
+
+---
+
+28. A/B TESTING
+
+---
+
+Как в AutoFlow, но глубже.
+
+Я должен иметь возможность создать несколько офферов:
+
+Variant A
+Variant B
+Variant C
+
+Например:
+
+A — профессиональный
+B — максимально короткий
+C — с акцентом на бесплатное превью
+
+И система должна отслеживать:
+
+sent
+delivered
+opened
+replied
+positive_reply
+negative_reply
+no_reply
+opt_out
+
+Не делать автоматический вывод о causality там, где данных недостаточно.
+
+---
+
+29. CAMPAIGNS
+
+---
+
+Добавить сущность Campaign.
+
+Campaign включает:
+
+- name;
+- source/search project;
+- target filters;
+- selected leads;
+- offer template;
+- offer variants;
+- channels;
+- schedule;
+- limits;
+- status.
+
+Статусы:
+
+Draft
+Ready
+Pending Approval
+Running
+Paused
+Completed
+Archived
+
+---
+
+30. DATABASE
+
+---
+
+Предусмотреть нормальную реляционную модель.
+
+Минимальные сущности:
+
+User
+Workspace
+SearchProject
+SearchQuery
+Niche
+Channel
+Video
+Thumbnail
+ThumbnailAnalysis
+ChannelAnalysis
+Lead
+LeadScore
+Contact
+GeneratedThumbnail
+GenerationJob
+Offer
+OfferVariant
+Campaign
+CampaignLead
+Approval
+Message
+MessageEvent
+Integration
+TelegramAccount
+EmailAccount
+Template
+ABTest
+AuditLog
+
+Все связи должны быть нормализованы.
+
+Не хранить всю бизнес-логику в одном JSON blob.
+
+JSON можно использовать для AI metadata и provider-specific fields, но основные сущности должны быть нормальными таблицами.
+
+---
+
+31. BACKGROUND JOBS
+
+---
+
+Парсинг и AI-анализ нельзя выполнять напрямую в HTTP request.
+
+Нужна очередь задач.
+
+Например:
+
+Redis + worker system.
+
+Отдельные job types:
+
+channel_discovery
+channel_enrichment
+video_discovery
+thumbnail_download
+thumbnail_analysis
+channel_analysis
+contact_enrichment
+lead_scoring
+thumbnail_generation
+offer_generation
+message_sending
+analytics_processing
+
+Каждый job должен иметь:
+
+queued
+running
+completed
+failed
+retrying
+cancelled
+
+---
+
+32. IDEMPOTENCY
+
+---
+
+Повторный запуск одного job не должен создавать дубликаты.
+
+Использовать:
+
+idempotency keys
+unique constraints
+job fingerprints
+
+---
+
+33. COST CONTROL
+
+---
+
+Это критически важно.
+
+AI-анализ сотен/тысяч каналов может быть дорогим.
+
+Нужен:
+
+- API usage tracking;
+- token usage;
+- image generation usage;
+- cost estimate;
+- cost per lead;
+- cost per analyzed thumbnail;
+- cost per generated thumbnail.
+
+Перед запуском большой задачи показывать:
+
+Estimated:
+12 840 thumbnails
+Estimated AI cost:
+$XX
+
+Я должен иметь возможность:
+
+- установить бюджет;
+- установить максимальное количество AI analysis;
+- остановить job;
+- отменить очередь.
+
+---
+
+34. ANALYSIS CACHE
+
+---
+
+Не анализировать одинаковую thumbnail повторно.
+
+Использовать hash:
+
+SHA-256 image hash
+
+или perceptual hash для визуально идентичных изображений.
+
+Если content уже существует:
+
+reuse existing analysis.
+
+---
+
+35. BULK OPERATIONS
+
+---
+
+Нужны массовые операции:
+
+Analyze selected
+Generate selected
+Reject selected
+Approve selected
+Export selected
+Add to campaign
+Change status
+Assign tag
+Add to project
+
+---
+
+36. TAGGING
+
+---
+
+Я должен иметь возможность назначать:
+
+Tags
+
+Например:
+
+weak-thumbnails
+high-potential
+gaming
+finance
+hot-lead
+contact-found
+sample-ready
+approved
+
+Также AI может автоматически добавлять tags.
+
+---
+
+37. FAVORITES
+
+---
+
+Нужны:
+
+Favorite Channels
+Favorite Thumbnails
+Favorite Generated Concepts
+
+---
+
+38. EXPORT
+
+---
+
+Экспортировать CSV/Excel/JSON.
+
+Например:
+
+Channel
+Niche
+Subscribers
+Avg Views
+Last Video
+Thumbnail Score
+Lead Score
+Telegram
+Email
+VK
+Offer Status
+Generated Thumbnail
+Contact Status
+
+---
+
+39. DASHBOARD
+
+---
+
+Главный dashboard должен показывать:
+
+Total Channels
+New Channels
+Analyzed
+Selected
+Generated Samples
+Offers Pending Approval
+Sent
+Replies
+Positive Replies
+Conversion
+
+Также:
+
+AI Analysis Costs
+Generation Costs
+Cost per Lead
+Best Niches
+Best Thumbnail Score Range
+Best Campaign
+Best Offer Variant
+
+---
+
+40. VISUAL PIPELINE
+
+---
+
+Нужна визуализация pipeline:
+
+Discovered
+↓
+Filtered
+↓
+Analyzed
+↓
+Shortlisted
+↓
+Generated
+↓
+Offer Ready
+↓
+Waiting Approval
+↓
+Approved
+↓
+Sent
+↓
+Replied
+
+Я должен видеть количество лидов на каждом этапе.
+
+---
+
+41. LEAD CARD
+
+---
+
+Lead card должна визуально показывать:
+
+Avatar
+Channel Name
+Niche
+Subscribers
+Views
+Activity
+Last Upload
+Thumbnail Score
+Lead Score
+Opportunity
+Contacts
+
+Thumbnail gallery.
+
+При открытии:
+
+AI Analysis
+Reasons for score
+Recommendations
+Generated samples
+Offer
+Communication history
+
+---
+
+42. SIDE-BY-SIDE THUMBNAIL COMPARISON
+
+---
+
+Ключевой UX.
+
+Я должен иметь возможность сравнить:
+
+Original Thumbnail
+AI Analysis
+Generated Variant A
+Generated Variant B
+Generated Variant C
+
+В одном интерфейсе.
+
+Желательно:
+
+Before / After
+
+и:
+
+Original vs Generated
+
+---
+
+43. REFERENCE SYSTEM
+
+---
+
+Нужна возможность сохранить пользовательские референсы.
+
+Reference:
+
+- image;
+- title;
+- tags;
+- description;
+- style;
+- category.
+
+При генерации AI должен иметь возможность получить:
+
+selected references
+
+-
+
+channel thumbnails
+
+-
+
+my instructions
+
+-
+
+AI analysis
+
+---
+
+44. PROMPT ENGINE
+
+---
+
+Не делать один giant prompt.
+
+Создать отдельные prompt templates:
+
+thumbnail_analysis_prompt
+channel_analysis_prompt
+lead_scoring_prompt
+offer_generation_prompt
+thumbnail_generation_prompt
+personalization_prompt
+
+Версионировать prompt templates.
+
+Хранить:
+
+prompt version
+model
+timestamp
+input
+output
+status
+
+Это позволит сравнивать изменения prompt.
+
+---
+
+45. QUALITY CONTROL ДЛЯ AI
+
+---
+
+AI output необходимо валидировать.
+
+Использовать strict schemas.
+
+Если AI вернул:
+
+invalid JSON
+missing field
+invalid score
+score > 10
+score < 1
+
+→ автоматически retry / repair.
+
+Нельзя сохранять сломанные результаты как валидные.
+
+---
+
+46. AI FEEDBACK LOOP
+
+---
+
+Система должна постепенно становиться полезнее.
+
+Если я:
+
+- одобряю определённый стиль;
+- отклоняю определённый стиль;
+- выбираю определённые варианты;
+- редактирую офферы;
+- меняю score;
+- помечаю лидов как irrelevant;
+
+эта информация должна сохраняться как feedback.
+
+В дальнейшем AI может использовать исторический feedback как дополнительный контекст.
+
+Нужна аналитика:
+
+AI recommendation
+vs
+Human decision
+
+Это позволит видеть:
+
+где AI переоценивает
+где AI недооценивает
+какие типы thumbnail я чаще выбираю.
+
+---
+
+47. МОЯ РУЧНАЯ КОРРЕКТИРОВКА SCORE
+
+---
+
+Мне нужна возможность вручную изменить AI score.
+
+Например:
+
+AI:
+6.8
+
+Я:
+5.5
+
+Хранить оба значения:
+
+ai_score
+human_score
+
+Не перезаписывать AI score.
+
+Это критично для дальнейшего feedback loop.
+
+---
+
+48. SEARCH PROJECTS
+
+---
+
+Я должен иметь возможность создать:
+
+Project:
+Finance YouTube Leads
+
+И внутри:
+
+Queries
+Filters
+Results
+Analysis
+Selected Leads
+Generated Samples
+Campaign
+Analytics
+
+Можно создавать много проектов.
+
+---
+
+49. MULTI-PROJECT DATA ISOLATION
+
+---
+
+Данные разных проектов должны логически разделяться.
+
+Один и тот же канал может появляться в нескольких проектах, но сама сущность Channel должна быть единой, а принадлежность к поисковым проектам должна храниться отдельно.
+
+---
+
+50. DEDUPLICATION
+
+---
+
+Если один канал найден:
+
+по 10 ключевым словам
+в 5 поисковых проектах
+через несколько видео
+
+это должен оставаться один Channel.
+
+Но система должна помнить:
+
+где и когда он был найден.
+
+---
+
+51. ANALYTICS ПО НИШАМ
+
+---
+
+Нужна аналитика:
+
+какие ниши дают больше лидов;
+
+какие дают более слабые thumbnail;
+
+какие дают больше high-opportunity channels;
+
+какие дают больше контактов;
+
+какие дают больше ответов;
+
+какие офферы работают лучше.
+
+Таким образом я должен понимать не только:
+
+“какие каналы нашлись”
+
+но и:
+
+“какие сегменты рынка дают мне лучших клиентов”.
+
+---
+
+52. ПРОФИЛЬ ИДЕАЛЬНОГО ЛИДА
+
+---
+
+Добавить configurable Ideal Lead Profile.
+
+Например:
+
+Subscribers:
+10k–100k
+
+Views:
+20k+
+
+Activity:
+High
+
+Thumbnail:
+≤ 6
+
+Niche:
+Business
+
+Contact:
+Telegram OR Email
+
+Тогда система должна автоматически считать:
+
+Fit Score.
+
+---
+
+53. SMART PRIORITIZATION
+
+---
+
+Вместо простой сортировки по одному параметру создать ranking.
+
+Пример:
+
+Priority Score =
+thumbnail opportunity
+\+
+channel fit
+\+
+views
+\+
+activity
+\+
+contactability
+\+
+commercial potential
+
+Все веса должны настраиваться.
+
+Я должен иметь возможность менять веса.
+
+---
+
+54. НИША И ТЕМАТИКА ДОЛЖНЫ БЫТЬ РАЗДЕЛЕНЫ
+
+---
+
+Например:
+
+Niche:
+Finance
+
+Topic:
+Investing
+
+Subtopic:
+ETF
+
+Это разные уровни классификации.
+
+Не ограничиваться одним тегом.
+
+---
+
+55. SEMANTIC CLASSIFICATION
+
+---
+
+AI должен уметь определить тематику канала даже если она прямо не указана.
+
+Например:
+
+Channel:
+“Разбираю сделки, инвестиции, дивиденды, банки”
+
+AI:
+
+Category:
+Finance
+
+Topic:
+Investing
+
+Subtopic:
+Personal Finance
+
+Confidence:
+0.91
+
+Эта классификация должна быть фильтруемой.
+
+---
+
+56. МОНИТОРИНГ НОВЫХ ВИДЕО
+
+---
+
+Предусмотреть возможность дальнейшего развития:
+
+Если канал уже находится в базе, система может периодически проверять новые видео.
+
+Если выходит новое видео:
+
+- получить thumbnail;
+- проанализировать;
+- обновить channel analytics;
+- пересчитать opportunity;
+- при необходимости уведомить меня.
+
+Но мониторинг должен быть отключаемым.
+
+---
+
+57. TELEGRAM NOTIFICATION ДЛЯ МЕНЯ
+
+---
+
+Отдельно от outreach должен быть Telegram notification bot для меня.
+
+Например:
+
+“Найден новый high-opportunity lead”
+
+Channel:
+X
+
+Subscribers:
+43k
+
+Avg Views:
+31k
+
+Thumbnail Score:
+4.9
+
+Lead Score:
+91
+
+Contact:
+Telegram
+
+Кнопки:
+
+Open Lead
+Generate Sample
+Approve
+Ignore
+
+---
+
+58. SECURITY
+
+---
+
+Критически важно:
+
+- secrets encrypted at rest;
+- API keys не хранить в frontend;
+- credentials only server-side;
+- audit log;
+- RBAC;
+- session security;
+- CSRF protection where relevant;
+- rate limiting;
+- input validation;
+- secure file uploads;
+- malware-safe upload handling;
+- private object storage where possible.
+
+---
+
+59. COMPLIANCE / OUTREACH SAFETY
+
+---
+
+Система не должна проектироваться как безконтрольный spam cannon.
+
+Необходимо предусмотреть:
+
+- rate limiting;
+- daily limits;
+- cooldown;
+- opt-out;
+- suppression list;
+- do-not-contact status;
+- manual approval;
+- duplicate-send protection;
+- campaign pause;
+- provider limits;
+- audit trail.
+
+Если контакт сообщил, что больше не хочет получать сообщения, такой контакт должен автоматически попасть в suppression list.
+
+---
+
+60. ERROR HANDLING
+
+---
+
+Каждая интеграция должна иметь нормальную обработку:
+
+timeouts
+429
+403
+401
+5xx
+provider unavailable
+invalid contact
+expired credentials
+
+Ошибки должны быть понятными человеку.
+
+Не:
+
+“Unknown error”
+
+а:
+
+“Telegram account session expired. Re-authentication required.”
+
+---
+
+61. OBSERVABILITY
+
+---
+
+Нужны:
+
+structured logs
+job logs
+AI logs
+integration logs
+generation logs
+error logs
+audit logs
+
+Dashboard:
+
+Jobs
+Queue
+Errors
+Retries
+API Usage
+AI Usage
+
+---
+
+62. UI/UX
+
+---
+
+Интерфейс должен быть современным professional SaaS dashboard.
+
+Приоритет:
+
+- скорость;
+- минимальное количество кликов;
+- работа с большими массивами данных;
+- удобная фильтрация;
+- быстрый preview изображений;
+- keyboard shortcuts;
+- bulk selection;
+- virtualized lists где необходимо.
+
+Основной рабочий экран:
+
+Sidebar
+Projects
+Channels
+Leads
+Analysis
+Generations
+Approval Queue
+Campaigns
+Contacts
+Analytics
+Integrations
+Settings
+
+---
+
+63. TECH STACK
+
+---
+
+Предпочтительная архитектура:
+
+Frontend:
+Next.js
+TypeScript
+React
+
+Backend:
+Python
+FastAPI
+
+Database:
+PostgreSQL
+
+ORM:
+SQLAlchemy
+
+Migrations:
+Alembic
+
+Queue:
+Redis + production-grade background worker
+
+Storage:
+S3-compatible object storage
+с возможностью локального filesystem storage для self-hosted deployment.
+
+AI:
+Provider abstraction
+OpenAI API
+vision/reasoning model
+GPT Image models
+
+Infrastructure:
+Docker Compose для локального запуска.
+
+Production:
+Docker-ready.
+
+Если есть сильная техническая причина выбрать другой стек — объясни её до внедрения.
+
+Не использовать технологию только потому, что она модная.
+
+---
+
+64. API ARCHITECTURE
+
+---
+
+Backend должен быть REST API или хорошо структурированный API layer.
+
+Примеры:
+
+POST /projects
+GET /projects
+POST /projects/{id}/discover
+POST /projects/{id}/analyze
+GET /channels
+GET /channels/{id}
+GET /leads
+GET /leads/{id}
+POST /leads/{id}/generate
+POST /leads/{id}/offer
+POST /offers/{id}/approve
+POST /offers/{id}/send
+GET /campaigns
+POST /campaigns
+GET /analytics
+
+Но API структуру выбирай исходя из общей архитектуры.
+
+---
+
+65. FRONTEND STATE
+
+---
+
+Не делать хаотичное состояние.
+
+Использовать чёткую архитектуру data fetching, mutation и cache invalidation.
+
+Loading / empty / error states обязательны.
+
+---
+
+66. TESTING
+
+---
+
+Нужны:
+
+unit tests
+integration tests
+API tests
+database tests
+worker tests
+AI schema validation tests
+provider adapter tests
+end-to-end tests
+
+Особенно протестировать:
+
+- deduplication;
+- score calculation;
+- filtering;
+- state machine;
+- manual approval;
+- duplicate send prevention;
+- retry logic;
+- contact normalization;
+- idempotency.
+
+---
+
+67. MOCK PROVIDERS
+
+---
+
+Для локальной разработки предусмотреть mock adapters:
+
+MockYouTubeProvider
+MockImageProvider
+MockTelegramProvider
+MockEmailProvider
+
+Чтобы можно было полностью тестировать систему без реальных API-вызовов.
+
+---
+
+68. DEMO MODE
+
+---
+
+Добавить Demo Mode.
+
+Создавать фиктивные:
+
+channels
+videos
+thumbnails
+AI analysis
+leads
+offers
+
+Это необходимо для быстрого тестирования UI.
+
+---
+
+69. MIGRATIONS
+
+---
+
+Все schema changes через Alembic.
+
+Не изменять production schema вручную.
+
+---
+
+70. DOCUMENTATION
+
+---
+
+Создать:
+
+README.md
+ARCHITECTURE.md
+API.md
+ENVIRONMENT.md
+DEPLOYMENT.md
+AI_PIPELINE.md
+DATABASE.md
+INTEGRATIONS.md
+
+Также:
+
+.env.example
+
+---
+
+71. CONFIGURATION
+
+---
+
+Ничего критически важного не hardcode.
+
+Конфиг:
+
+DATABASE_URL
+REDIS_URL
+OPENAI_API_KEY
+OPENAI_VISION_MODEL
+OPENAI_IMAGE_MODEL
+STORAGE_URL
+TELEGRAM credentials
+EMAIL credentials
+etc.
+
+---
+
+72. PROVIDER ABSTRACTION
+
+---
+
+Очень важно не связать core logic напрямую с OpenAI или Telegram.
+
+Например:
+
+interface VisionProvider
+interface ImageProvider
+interface EmailProvider
+interface MessagingProvider
+interface VideoDiscoveryProvider
+
+Это позволит позже добавить:
+
+Gemini
+Claude
+другие image models
+другие search providers
+другие messaging channels.
+
+---
+
+73. RESILIENCE
+
+---
+
+Если AI временно недоступен:
+
+job не должен потеряться.
+
+Если Telegram недоступен:
+
+offer остаётся approved, но отправка становится retryable.
+
+Если thumbnail download failed:
+
+retry.
+
+Если image generation failed:
+
+сохранить error + повторить.
+
+---
+
+74. JOB PRIORITY
+
+---
+
+Очередь должна поддерживать priority.
+
+Например:
+
+Manual generation:
+HIGH
+
+Interactive analysis:
+HIGH
+
+Bulk analysis:
+NORMAL
+
+Background monitoring:
+LOW
+
+---
+
+75. FINANCIAL / COST OBSERVABILITY
+
+---
+
+У каждого AI operation:
+
+provider
+model
+input tokens
+output tokens
+image input
+image output
+estimated cost
+actual cost if available
+duration
+
+Чтобы я видел:
+
+Сколько стоит один найденный lead.
+
+---
+
+76. HUMAN APPROVAL FOR EXPENSIVE ACTIONS
+
+---
+
+Перед массовой генерацией:
+
+“Generate 250 thumbnails?”
+
+Estimated cost:
+$XX
+
+[Confirm]
+
+Перед большой AI analysis batch:
+
+“Analyze 1,200 thumbnails?”
+
+Estimated cost:
+$XX
+
+[Confirm]
+
+---
+
+77. NO FAKE IMPLEMENTATION
+
+---
+
+Критически важно:
+
+Не создавать интерфейс, который выглядит работающим, но использует fake data.
+
+Если integration ещё не подключена:
+
+показывать реальный status:
+
+“Not configured”
+
+а не притворяться, что API работает.
+
+Если реализован mock:
+
+явно маркировать Demo/Mock.
+---
+
+
+
+## 77A. PROJECT WORKSPACE
+
+
+
+Весь проект должен создаваться и развиваться строго в следующей директории:
+
+
+
+C:\youtubesistemprew
+
+
+
+Это основной workspace проекта.
+
+
+
+Не создавай исходный код, конфигурацию, документацию, миграции или другие файлы проекта в случайных директориях.
+
+
+
+Перед началом работы:
+
+
+
+1. Проверь, существует ли:
+
+   C:\youtubesistemprew
+
+
+
+2. Если директории нет — создай её.
+
+
+
+3. Изучи её текущее содержимое.
+
+
+
+4. Если проект уже существует, сначала проведи аудит существующей кодовой базы.
+
+
+
+5. Не удаляй существующий код, конфигурацию или данные без необходимости.
+
+
+
+6. Не начинай автоматический rewrite всего проекта только потому, что существует более новый или другой технологический подход.
+
+
+
+Основная структура проекта должна находиться внутри:
+
+
+
+C:\youtubesistemprew
+
+
+
+Предлагаемая структура:
+
+
+
+C:\youtubesistemprew
+
+backend
+
+frontend
+
+workers
+
+migrations
+
+infrastructure
+
+docs
+
+scripts
+
+tests
+
+storage
+
+.env.example
+
+docker-compose.yml
+
+README.md
+
+ARCHITECTURE.md
+
+
+
+Но не считай эту структуру обязательной.
+
+
+
+Измени её, если после архитектурного анализа будет выбран более подходящий вариант.
+
+
+
+Главное правило:
+
+
+
+Сначала определить правильную архитектуру, затем создать структуру.
+
+
+
+---
+
+
+
+## 77B. ENGINEERING RESEARCH BEFORE IMPLEMENTATION
+
+
+
+Перед реализацией любого крупного архитектурного компонента сначала проведи техническое исследование.
+
+
+
+Не выбирай технологии автоматически.
+
+
+
+Для каждого существенного решения сравни несколько подходов и выбери наиболее подходящий для данного проекта.
+
+
+
+Исследовать как минимум:
+
+
+
+* frontend framework;
+
+* backend framework;
+
+* programming languages;
+
+* ORM;
+
+* PostgreSQL architecture;
+
+* background job system;
+
+* message broker;
+
+* caching;
+
+* object storage;
+
+* image processing;
+
+* YouTube data acquisition;
+
+* YouTube API / scraping architecture;
+
+* AI providers;
+
+* vision models;
+
+* image generation models;
+
+* prompt architecture;
+
+* schema validation;
+
+* authentication;
+
+* authorization;
+
+* secrets management;
+
+* logging;
+
+* observability;
+
+* monitoring;
+
+* deployment;
+
+* Docker;
+
+* CI/CD;
+
+* testing stack;
+
+* rate limiting;
+
+* retry architecture;
+
+* idempotency;
+
+* scalability.
+
+
+
+Для каждой технологии необходимо определить:
+
+
+
+1. Что она решает.
+
+2. Почему она подходит.
+
+3. Какие есть альтернативы.
+
+4. Почему альтернативы не выбраны.
+
+5. Какие ограничения существуют.
+
+6. Каковы потенциальные риски.
+
+7. Как технология поведёт себя при увеличении нагрузки.
+
+8. Насколько сложно заменить её в будущем.
+
+9. Какие дополнительные библиотеки потребуются.
+
+10. Есть ли официальная поддержка и документация.
+
+11. Какие версии следует использовать.
+
+12. Какие зависимости между компонентами возникают.
+
+
+
+---
+
+
+
+## 77C. TECHNOLOGY SELECTION
+
+
+
+Не придерживайся заранее заданного стека только потому, что он указан в первоначальном техническом задании.
+
+
+
+Предложенный стек является исходной гипотезой, а не обязательным решением.
+
+
+
+Ты должен самостоятельно определить:
+
+
+
+* оптимальный backend;
+
+* оптимальный frontend;
+
+* оптимальную БД;
+
+* оптимальный worker system;
+
+* оптимальный queue;
+
+* оптимальный storage;
+
+* оптимальный AI stack;
+
+* оптимальные SDK;
+
+* оптимальные библиотеки.
+
+
+
+При выборе учитывай одновременно:
+
+
+
+Performance
+
+Reliability
+
+Developer Experience
+
+Maintainability
+
+Scalability
+
+Cost
+
+Security
+
+Community / ecosystem
+
+Documentation
+
+API stability
+
+Migration complexity
+
+
+
+Если, например, вместо Redis + Celery оптимальнее использовать другой production-grade queue — объясни решение.
+
+
+
+Если вместо отдельного сервиса требуется существующая возможность PostgreSQL — рассмотрим её.
+
+
+
+Не добавляй технологии без необходимости.
+
+
+
+Каждый дополнительный сервис увеличивает сложность системы.
+
+
+
+---
+
+
+
+## 77D. ENGINEERING DECISION LOG
+
+
+
+Все значимые архитектурные решения должны записываться в отдельный журнал.
+
+
+
+Создай:
+
+
+
+C:\youtubesistemprew\docs\decisions\
+
+
+
+Каждое существенное решение оформляй отдельным ADR-файлом.
+
+
+
+Формат:
+
+
+
+ADR-0001-title.md
+
+ADR-0002-title.md
+
+ADR-0003-title.md
+
+
+
+Пример:
+
+
+
+ADR-0001-backend-framework.md
+
+ADR-0002-database.md
+
+ADR-0003-job-queue.md
+
+ADR-0004-ai-provider-architecture.md
+
+ADR-0005-storage.md
+
+
+
+Каждый ADR должен содержать:
+
+
+
+# Title
+
+
+
+## Status
+
+
+
+Proposed / Accepted / Rejected / Superseded
+
+
+
+## Context
+
+
+
+Какая проблема существует и почему необходимо принять решение.
+
+
+
+## Decision
+
+
+
+Какое решение выбрано.
+
+
+
+## Alternatives
+
+
+
+Какие альтернативы рассматривались.
+
+
+
+## Why
+
+
+
+Почему выбран именно этот вариант.
+
+
+
+## Trade-offs
+
+
+
+Какие преимущества и недостатки появляются.
+
+
+
+## Risks
+
+
+
+Какие риски существуют.
+
+
+
+## Consequences
+
+
+
+К чему приведёт решение для проекта.
+
+
+
+## Dependencies
+
+
+
+Какие дополнительные компоненты, библиотеки или сервисы потребуются.
+
+
+
+## Migration
+
+
+
+Насколько сложно изменить решение в будущем.
+
+
+
+## Date
+
+
+
+Дата принятия решения.
+
+
+
+---
+
+
+
+## 77E. TECHNOLOGY REGISTER
+
+
+
+Создай отдельный файл:
+
+
+
+C:\youtubesistemprew\docs\TECHNOLOGY_REGISTER.md
+
+
+
+В нём поддерживай актуальный список всех основных технологий проекта.
+
+
+
+Например:
+
+
+
+| Component        | Technology | Version | Purpose              | Reason |
+
+| ---------------- | ---------- | ------- | -------------------- | ------ |
+
+| Frontend         | Next.js    | ...     | Web UI               | ...    |
+
+| Backend          | FastAPI    | ...     | API                  | ...    |
+
+| Database         | PostgreSQL | ...     | Persistence          | ...    |
+
+| ORM              | SQLAlchemy | ...     | DB access            | ...    |
+
+| Migration        | Alembic    | ...     | Schema migrations    | ...    |
+
+| Queue            | ...        | ...     | Background jobs      | ...    |
+
+| Cache            | ...        | ...     | Caching              | ...    |
+
+| AI Vision        | ...        | ...     | Thumbnail analysis   | ...    |
+
+| Image Generation | ...        | ...     | Thumbnail generation | ...    |
+
+
+
+Этот документ необходимо обновлять при изменении архитектуры.
+
+
+
+---
+
+
+
+## 77F. LIBRARY & DEPENDENCY REGISTER
+
+
+
+Создай:
+
+
+
+C:\youtubesistemprew\docs\DEPENDENCIES.md
+
+
+
+Документ должен содержать ключевые библиотеки проекта.
+
+
+
+Для каждой:
+
+
+
+* название;
+
+* версия;
+
+* назначение;
+
+* почему используется;
+
+* критичность;
+
+* альтернативы;
+
+* потенциальные проблемы совместимости.
+
+
+
+Не добавляй dependency только для решения простой задачи, которую можно реализовать без неё.
+
+
+
+Избегай dependency bloat.
+
+
+
+---
+
+
+
+## 77G. API / SERVICE RESEARCH
+
+
+
+Для каждого внешнего API, используемого проектом, необходимо заранее определить:
+
+
+
+* API provider;
+
+* официальный SDK;
+
+* authentication;
+
+* rate limits;
+
+* quotas;
+
+* pricing;
+
+* request limits;
+
+* retry behavior;
+
+* error codes;
+
+* pagination;
+
+* caching opportunities;
+
+* data retention;
+
+* terms / technical restrictions relevant to implementation.
+
+
+
+Особенно внимательно исследовать:
+
+
+
+YouTube
+
+OpenAI
+
+Telegram
+
+Email providers
+
+VK
+
+Storage providers
+
+
+
+Не основывай архитектуру на неподтверждённой или устаревшей информации.
+
+
+
+Для актуальных SDK, API и моделей используй официальную документацию соответствующего поставщика.
+
+
+
+---
+
+
+
+## 77H. AI ARCHITECTURE REGISTER
+
+
+
+Создай:
+
+
+
+C:\youtubesistemprew\docs\AI_ARCHITECTURE.md
+
+
+
+Опиши отдельно:
+
+
+
+1. Discovery AI.
+
+2. Thumbnail Vision Analysis.
+
+3. Channel Analysis.
+
+4. Lead Scoring.
+
+5. Contact Intelligence.
+
+6. Offer Generation.
+
+7. Thumbnail Generation.
+
+8. Human Feedback.
+
+9. AI Evaluation.
+
+10. Cost Control.
+
+
+
+Для каждого AI-модуля указать:
+
+
+
+* model;
+
+* provider;
+
+* input;
+
+* output;
+
+* schema;
+
+* prompt version;
+
+* expected latency;
+
+* estimated cost;
+
+* fallback;
+
+* retry strategy;
+
+* caching strategy.
+
+
+
+Не связывай весь AI pipeline с одной моделью.
+
+
+
+AI provider должен быть заменяемым.
+
+
+
+---
+
+
+
+## 77I. ARCHITECTURE CHANGE LOG
+
+
+
+Создай:
+
+
+
+C:\youtubesistemprew\docs\ARCHITECTURE_CHANGELOG.md
+
+
+
+Каждое крупное изменение архитектуры фиксируй:
+
+
+
+Date
+
+Change
+
+Reason
+
+Affected modules
+
+Migration required
+
+Backward compatibility
+
+
+
+Например:
+
+
+
+2026-09-24
+
+Replaced queue implementation
+
+Reason: better retry semantics
+
+Affected: workers / jobs / infrastructure
+
+Migration: no
+
+Compatibility: yes
+
+
+
+---
+
+
+
+## 77J. OPEN QUESTIONS & RISKS
+
+
+
+Создай:
+
+
+
+C:\youtubesistemprew\docs\OPEN_QUESTIONS.md
+
+
+
+Во время разработки фиксируй вопросы, которые требуют отдельного решения.
+
+
+
+Например:
+
+
+
+* оптимальный provider для YouTube discovery;
+
+* ограничения конкретного API;
+
+* масштабирование thumbnail analysis;
+
+* стоимость массовой vision-аналитики;
+
+* Telegram integration constraints;
+
+* storage strategy;
+
+* generation throughput.
+
+
+
+Каждый вопрос должен иметь статус:
+
+
+
+OPEN
+
+INVESTIGATING
+
+DECIDED
+
+BLOCKED
+
+
+
+Не оставляй критические архитектурные вопросы молча нерешёнными.
+
+
+
+---
+
+
+
+## 77K. DO NOT HIDE ENGINEERING TRADE-OFFS
+
+
+
+Не выбирай технологию только потому, что она популярна.
+
+
+
+Не выбирай библиотеку только потому, что она удобна для быстрого прототипа.
+
+
+
+Не усложняй архитектуру ради “enterprise”-вида.
+
+
+
+Не создавай микросервисы без реальной необходимости.
+
+
+
+Не используй Kubernetes только потому, что проект потенциально может масштабироваться.
+
+
+
+Не добавляй Kafka, RabbitMQ, Elasticsearch, ClickHouse и другие тяжёлые компоненты без доказанной необходимости.
+
+
+
+Архитектура должна соответствовать реальной нагрузке проекта.
+
+
+
+Prefer:
+
+
+
+simple
+
+modular
+
+observable
+
+replaceable
+
+testable
+
+
+
+over:
+
+
+
+overengineered
+
+distributed-for-no-reason
+
+hard-to-debug
+
+
+
+---
+
+
+
+## 77L. DECISION GATE
+
+
+
+Перед началом каждого крупного этапа остановись на уровне технического решения и проверь:
+
+
+
+1. Архитектурное решение принято?
+
+2. Альтернативы рассмотрены?
+
+3. Риски понятны?
+
+4. Зависимости определены?
+
+5. Стоимость понятна?
+
+6. Масштабирование учтено?
+
+7. Внешние API проверены?
+
+8. ADR создан?
+
+9. Документация обновлена?
+
+10. Решение обратимо или понятен migration path?
+
+
+
+Только после этого переходи к реализации.
+
+
+
+---
+
+
+
+## 77M. ENGINEERING OUTPUT
+
+
+
+После архитектурного исследования перед реализацией предоставь компактный Engineering Summary.
+
+
+
+Формат:
+
+
+
+PROJECT:
+
+C:\youtubesistemprew
+
+
+
+ARCHITECTURE:
+
+...
+
+
+
+FRONTEND:
+
+...
+
+
+
+BACKEND:
+
+...
+
+
+
+DATABASE:
+
+...
+
+
+
+QUEUE:
+
+...
+
+
+
+STORAGE:
+
+...
+
+
+
+AI:
+
+...
+
+
+
+IMAGE GENERATION:
+
+...
+
+
+
+INTEGRATIONS:
+
+...
+
+
+
+KEY LIBRARIES:
+
+...
+
+
+
+MAIN RISKS:
+
+...
+
+
+
+IMPORTANT TRADE-OFFS:
+
+...
+
+
+
+FIRST IMPLEMENTATION PHASE:
+
+...
+
+
+
+После завершения этапа обновляй этот summary в:
+
+
+
+C:\youtubesistemprew\docs\ENGINEERING_SUMMARY.md
+
+
+
+Важно:
+
+
+
+Не записывай внутреннюю скрытую цепочку рассуждений.
+
+
+
+Записывай только полезные для разработки артефакты инженерного анализа:
+
+
+
+* решения;
+
+* аргументы;
+
+* альтернативы;
+
+* trade-offs;
+
+* риски;
+
+* ограничения;
+
+* зависимости;
+
+* результаты технической проверки;
+
+* выбранную архитектуру;
+
+* результаты тестирования.
+
+
+
+---
+
+
+
+## 77N. SELF-REVIEW BEFORE MAJOR CHANGES
+
+
+
+Перед крупным изменением кода проверь:
+
+
+
+* не ломает ли изменение существующий функционал;
+
+* не дублирует ли существующую возможность;
+
+* не нарушает ли выбранную архитектуру;
+
+* не создаёт ли ненужную связанность;
+
+* не добавляет ли ненужную зависимость;
+
+* не увеличивает ли стоимость AI/API;
+
+* не создаёт ли security risk;
+
+* можно ли протестировать изменение;
+
+* нужно ли обновить ADR;
+
+* нужно ли обновить документацию.
+
+
+
+Если архитектурное решение изменилось, сначала обнови ADR, затем код.
+
+
+
+---
+
+
+
+## 77O. FINAL PROJECT KNOWLEDGE BASE
+
+
+
+По завершении разработки папка:
+
+
+
+C:\youtubesistemprew\docs\
+
+
+
+должна стать полноценной технической базой проекта.
+
+
+
+Минимально:
+
+
+
+README.md
+
+ARCHITECTURE.md
+
+ENGINEERING_SUMMARY.md
+
+TECHNOLOGY_REGISTER.md
+
+DEPENDENCIES.md
+
+AI_ARCHITECTURE.md
+
+ARCHITECTURE_CHANGELOG.md
+
+OPEN_QUESTIONS.md
+
+INTEGRATIONS.md
+
+DATABASE.md
+
+DEPLOYMENT.md
+
+API.md
+
+AI_PIPELINE.md
+
+
+
+и:
+
+
+
+docs\decisions\ADR-*.md
+
+
+
+Любой другой разработчик или AI-agent должен иметь возможность открыть эту директорию и понять:
+
+
+
+что построено;
+
+почему именно так;
+
+какие технологии используются;
+
+какие решения принимались;
+
+какие альтернативы были отклонены;
+
+какие ограничения существуют;
+
+как запустить проект;
+
+как развивать его дальше.
+
+
+
+---
+
+
+
+## 77P. IMPORTANT
+
+
+
+Ты работаешь не только как coding agent.
+
+
+
+Ты также выполняешь функции:
+
+
+
+Software Architect
+
+AI Systems Architect
+
+Technical Researcher
+
+Data Architect
+
+DevOps Engineer
+
+Security Reviewer
+
+QA Engineer
+
+
+
+Поэтому твоя задача:
+
+
+
+Research → Decide → Document → Implement → Test → Review → Update Documentation.
+
+
+
+Не:
+
+
+
+Code → Hope → Move On.
+
+
+
+Каждый крупный архитектурный выбор должен иметь документированный след внутри:
+
+
+
+C:\youtubesistemprew\docs\
+
+
+---
+
+78. ПОРЯДОК РАЗРАБОТКИ
+
+---
+
+Не пытайся написать весь проект одним хаотичным проходом.
+
+Сначала:
+
+1. Исследуй существующий репозиторий.
+2. Определи текущую архитектуру.
+3. Проведи architecture audit.
+4. Составь implementation plan.
+5. Определи database schema.
+6. Определи job architecture.
+7. Определи AI pipeline.
+8. Определи integration abstraction.
+9. После этого начинай реализацию.
+
+Если существующий проект уже существует, НЕ переписывай его без необходимости.
+
+Сначала используй существующий код и архитектуру.
+
+---
+
+79. PHASE 1
+
+---
+
+Сначала реализовать фундамент:
+
+- PostgreSQL;
+- models;
+- migrations;
+- FastAPI;
+- project management;
+- channel;
+- video;
+- thumbnail;
+- storage;
+- basic frontend;
+- authentication;
+- Docker Compose.
+
+---
+
+80. PHASE 2
+
+---
+
+Discovery:
+
+- YouTube provider;
+- queries;
+- niches;
+- filters;
+- channel deduplication;
+- video collection.
+
+---
+
+81. PHASE 3
+
+---
+
+AI:
+
+- thumbnail ingestion;
+- vision analysis;
+- JSON schema;
+- score;
+- channel analysis;
+- lead score.
+
+---
+
+82. PHASE 4
+
+---
+
+Human workflow:
+
+- shortlist;
+- favorites;
+- manual score;
+- tags;
+- approval queue.
+
+---
+
+83. PHASE 5
+
+---
+
+Image generation:
+
+- references;
+- prompt engine;
+- GPT Image;
+- generation queue;
+- variants;
+- comparison.
+
+---
+
+84. PHASE 6
+
+---
+
+Contact enrichment:
+
+- email;
+- Telegram;
+- VK;
+- links;
+- contact scoring.
+
+---
+
+85. PHASE 7
+
+---
+
+Offers:
+
+- personalization;
+- templates;
+- AI copy;
+- free thumbnail attachment;
+- approval.
+
+---
+
+86. PHASE 8
+
+---
+
+Outreach:
+
+- email;
+- Telegram;
+- VK;
+- quotas;
+- campaign;
+- statuses;
+- retry.
+
+---
+
+87. PHASE 9
+
+---
+
+Analytics:
+
+- conversion;
+- A/B;
+- campaign;
+- niche;
+- cost;
+- AI feedback.
+
+---
+
+88. IMPORTANT PRODUCT PRINCIPLE
+
+---
+
+Главная ценность системы — не сам парсер.
+
+Главная ценность:
+
+“AI понимает, кому действительно имеет смысл предложить услугу по созданию превью, почему именно этому каналу стоит написать и что конкретно ему предложить.”
+
+То есть система должна отвечать не только на:
+
+“Кто существует?”
+
+а на:
+
+“Кому мне стоит написать?”
+“Почему?”
+“Что у него сейчас плохо?”
+“Как это исправить?”
+“Какое бесплатное превью ему показать?”
+“Какой оффер ему отправить?”
+“Через какой канал?”
+“Какой вариант сообщения лучше?”
+“Что произошло после отправки?”
+
+---
+
+89. ДОЛЖЕН ПОЯВИТЬСЯ ИНТЕЛЛЕКТУАЛЬНЫЙ LEAD ENGINE
+
+---
+
+В конечном итоге система должна формировать примерно такой объект:
+
+Lead:
+
+Channel:
+Example Channel
+
+Niche:
+Business
+
+Subscribers:
+48,200
+
+Average Views:
+31,400
+
+Activity:
+High
+
+Last Upload:
+2 days ago
+
+Thumbnail Score:
+4.7/10
+
+Lead Score:
+91/100
+
+Visual Opportunity:
+HIGH
+
+Contactability:
+HIGH
+
+Best Video:
+“How I Built…”
+
+Current Thumbnail Problems:
+
+- weak hierarchy
+- low subject separation
+- too much text
+- low mobile readability
+
+Recommended Redesign:
+
+- stronger subject isolation
+- simpler typography
+- larger focal point
+- higher contrast
+
+Generated Free Sample:
+YES
+
+Offer:
+READY
+
+Approval:
+PENDING
+
+---
+
+90. ПОСЛЕДНИЙ ЭТАП — ПРОСТОТА РАБОТЫ ДЛЯ МЕНЯ
+
+---
+
+Моя работа не должна превращаться в ручную рутину.
+
+Идеальный сценарий:
+
+Я ввёл 100 ниш.
+
+Нажал:
+
+“Find Channels”
+
+Система нашла тысячи кандидатов.
+
+Я установил:
+
+Subscribers:
+10k–100k
+
+Views:
+10k+
+
+Activity:
+High
+
+Thumbnail Score:
+≤ 6
+
+Lead Score:
+≥ 70
+
+Система оставила, например, 184 канала.
+
+Я вижу список.
+
+Выбираю 30.
+
+Нажимаю:
+
+“Analyze + Generate Samples”
+
+Система анализирует их thumbnail.
+
+Генерирует варианты.
+
+Я выбрал 12.
+
+Нажимаю:
+
+“Prepare Offers”
+
+Система собирает:
+
+contact
+analysis
+personalization
+offer
+sample thumbnail
+
+После этого у меня появляется:
+
+12 offers pending approval.
+
+Я открываю карточки, редактирую, где требуется, и нажимаю:
+
+Approve.
+
+Только после этого система начинает отправку.
+
+После отправки я вижу:
+
+Sent
+Delivered
+Replied
+Positive
+Negative
+No Reply
+Opted Out
+
+Таким образом, весь процесс от поиска до первого персонализированного предложения находится в одной системе.
+
+---
+
+91. ЧТО Я ОЖИДАЮ ОТ ТЕБЯ
+
+---
+
+Не ограничивайся обсуждением архитектуры.
+
+Если кодовая база уже существует — сначала изучи её.
+
+Если проект пустой — создай рабочий фундамент.
+
+Не делай “proof of concept” с фальшивыми данными, когда можно создать реальную архитектуру.
+
+Не создавай монолит, который невозможно развивать.
+
+Не связывай модули жёстко.
+
+Не дублируй бизнес-логику.
+
+Не прячь ошибки.
+
+Не делай unsafe shortcuts.
+
+Не переписывай работающие части без причины.
+
+После каждого крупного этапа:
+
+1. реализуй;
+2. запусти проверки;
+3. исправь ошибки;
+4. добавь тесты;
+5. проверь интеграцию;
+6. только потом переходи дальше.
+
+---
+
+92. ОБЯЗАТЕЛЬНЫЙ РЕЗУЛЬТАТ
+
+---
+
+В результате должен получиться не обычный YouTube scraper.
+
+Мне нужна полноценная:
+
+AI YouTube Thumbnail Lead Intelligence & Outreach Platform.
+
+Она должна объединять:
+
+YouTube Discovery
+\+
+Channel Intelligence
+\+
+Thumbnail Vision Analysis
+\+
+Lead Scoring
+\+
+Contact Enrichment
+\+
+AI Thumbnail Generation
+\+
+Personalized Offer Generation
+\+
+Human Approval
+\+
+Multi-channel Outreach
+\+
+Campaign Management
+\+
+A/B Testing
+\+
+Analytics
+\+
+AI Feedback Loop.
+
+Система должна быть рассчитана на реальную эксплуатацию, большие объёмы данных, асинхронные задачи, повторный запуск, отказоустойчивость, контроль расходов и дальнейшее масштабирование.
+
+Главная метрика системы:
+
+не количество найденных каналов,
+
+а количество качественных, релевантных, контактируемых и потенциально конверсионных лидов, дошедших до качественного персонализированного оффера.

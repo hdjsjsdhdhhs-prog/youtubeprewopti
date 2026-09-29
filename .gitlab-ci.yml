@@ -1,0 +1,120 @@
+# CI (ADR-0013): lint → test → build. Linux runners; `build-images` needs a runner that allows
+# Docker-in-Docker (privileged). Playwright E2E on the compose stack is planned separately.
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - lint
+  - test
+  - build
+
+default:
+  interruptible: true
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+
+# --- backend ------------------------------------------------------------------------------------
+
+.backend:
+  image: python:3.12-slim-bookworm
+  cache:
+    key:
+      files: [backend/pyproject.toml]
+      prefix: pip
+    paths: [.cache/pip]
+  before_script:
+    - cd backend
+    - pip install -e ".[dev]"
+  rules:
+    - changes: [backend/**/*, .gitlab-ci.yml]
+
+lint-backend:
+  extends: .backend
+  stage: lint
+  script:
+    - ruff check .
+    - mypy app
+
+test-backend:
+  extends: .backend
+  stage: test
+  services:
+    - name: postgres:16
+      alias: postgres
+      # Procrastinate recognises unique violations by the English message text (ADR-0003).
+      command: ["postgres", "-c", "lc_messages=C"]
+  variables:
+    POSTGRES_DB: ytlead_test
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: ci-only-password
+    # Throwaway service database; tests recreate the schema via Alembic (downgrade base → upgrade head).
+    YTL_TEST_DATABASE_URL: postgresql+psycopg://postgres:ci-only-password@postgres:5432/ytlead_test
+  script:
+    # Random per-job key: secrets encrypted in tests are never meant to be read again.
+    - export YTL_MASTER_KEY="$(python -c 'import base64, os; print(base64.b64encode(os.urandom(32)).decode())')"
+    - pytest -q --junitxml=report.xml
+    # Models and migrations must agree (the schema is at head after the test session).
+    - YTL_DATABASE_URL="$YTL_TEST_DATABASE_URL" YTL_MIGRATION_DATABASE_URL="$YTL_TEST_DATABASE_URL" alembic check
+  artifacts:
+    when: always
+    reports:
+      junit: backend/report.xml
+
+# --- frontend -----------------------------------------------------------------------------------
+
+.frontend:
+  image: node:24-bookworm-slim
+  cache:
+    key:
+      files: [frontend/package-lock.json]
+      prefix: npm
+    paths: [.cache/npm]
+  before_script:
+    - cd frontend
+    - npm ci --no-audit --no-fund
+  rules:
+    - changes: [frontend/**/*, .gitlab-ci.yml]
+
+lint-frontend:
+  extends: .frontend
+  stage: lint
+  script:
+    - npm run lint
+    - npm run typecheck
+
+test-frontend:
+  extends: .frontend
+  stage: test
+  script:
+    - npm test
+
+# --- images -------------------------------------------------------------------------------------
+
+build-images:
+  stage: build
+  image: docker:29
+  services:
+    - name: docker:29-dind
+      alias: docker
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    # Compose file: syntax + required variables (dummy values, nothing is started).
+    - sed -e 's/^\(POSTGRES_PASSWORD\|YTL_DB_OWNER_PASSWORD\|YTL_DB_APP_PASSWORD\)=$/\1=ci/'
+          -e 's/^YTL_MASTER_KEY=$/YTL_MASTER_KEY=ci/' infrastructure/.env.example > /tmp/compose.env
+    - docker compose -f infrastructure/docker-compose.yml --env-file /tmp/compose.env config -q
+    - docker build --pull -t "ytlead-backend:$CI_COMMIT_SHORT_SHA" backend
+    - docker build --pull -t "ytlead-web:$CI_COMMIT_SHORT_SHA" --build-arg YTL_API_ORIGIN=http://api:8000 frontend
+    # The backend image must import the app and know its CLI/entrypoints.
+    - docker run --rm -e YTL_DATABASE_URL=postgresql+psycopg://x:x@localhost/x -e YTL_MASTER_KEY=ci
+        "ytlead-backend:$CI_COMMIT_SHORT_SHA" python -c "import app.main, app.workers.queue, app.cli"
+  rules:
+    - changes: [backend/**/*, frontend/**/*, infrastructure/**/*, .gitlab-ci.yml]

@@ -1,0 +1,134 @@
+# Production / Linux deployment (ADR-0013). Not used for development on the Windows dev machine.
+#
+#   cd infrastructure
+#   cp .env.example .env        # fill in secrets
+#   docker compose up -d --build
+#
+# Services: postgres (data + job queue), migrate (one-shot `alembic upgrade head`), api, worker, web.
+# Only `web` is published; the API is reachable through Next's /api/* proxy (same-origin cookies).
+# See docs/DEPLOYMENT.md.
+
+name: ytlead
+
+x-backend: &backend
+  build:
+    context: ../backend
+  image: ytlead-backend:${YTL_IMAGE_TAG:-latest}
+  restart: unless-stopped
+  volumes:
+    - storage:/data/storage
+
+# Runtime settings shared by api and worker. They connect as the DML-only role `ytlead_app`.
+x-backend-env: &backend-env
+  YTL_ENV: prod
+  YTL_DATABASE_URL: postgresql+psycopg://ytlead_app:${YTL_DB_APP_PASSWORD:?set YTL_DB_APP_PASSWORD}@postgres:5432/ytlead
+  YTL_MASTER_KEY: ${YTL_MASTER_KEY:?set YTL_MASTER_KEY}
+  YTL_COOKIE_SECURE: ${YTL_COOKIE_SECURE:-true}
+  YTL_STORAGE_PATH: /data/storage
+  YTL_DEMO_MODE: ${YTL_DEMO_MODE:-false}
+  YTL_YOUTUBE_API_KEY: ${YTL_YOUTUBE_API_KEY:-}
+  YTL_OPENAI_API_KEY: ${YTL_OPENAI_API_KEY:-}
+  YTL_THUMBNAIL_FETCHER: ${YTL_THUMBNAIL_FETCHER:-}
+  YTL_WORKER_CONCURRENCY: ${YTL_WORKER_CONCURRENCY:-2}
+  YTL_LOG_LEVEL: ${YTL_LOG_LEVEL:-INFO}
+  YTL_LOG_JSON: "true"
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    # Procrastinate recognises unique violations by the English message text (ADR-0003).
+    command: ["postgres", "-c", "lc_messages=C"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+      # Read only by initdb/10-ytlead.sh on the first start (empty data volume).
+      YTL_DB_OWNER_PASSWORD: ${YTL_DB_OWNER_PASSWORD:?set YTL_DB_OWNER_PASSWORD}
+      YTL_DB_APP_PASSWORD: ${YTL_DB_APP_PASSWORD:?set YTL_DB_APP_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ytlead"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    <<: *backend
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    volumes: []
+    environment:
+      YTL_ENV: prod
+      # Schema owner: migrations create tables, types and the Procrastinate schema.
+      YTL_DATABASE_URL: postgresql+psycopg://ytlead_owner:${YTL_DB_OWNER_PASSWORD}@postgres:5432/ytlead
+      YTL_MIGRATION_DATABASE_URL: postgresql+psycopg://ytlead_owner:${YTL_DB_OWNER_PASSWORD}@postgres:5432/ytlead
+      YTL_MASTER_KEY: ${YTL_MASTER_KEY}
+      YTL_LOG_JSON: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *backend-env
+      # uvicorn takes the client IP from X-Forwarded-For only when the request comes from `web`
+      # (login rate limit per IP). Next forwards that header unchanged, so the TLS reverse proxy in
+      # front of `web` must OVERWRITE it with the real client address — see docs/DEPLOYMENT.md.
+      FORWARDED_ALLOW_IPS: ${YTL_WEB_IP:-172.30.57.10}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).status != 200)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.workers"]
+    environment: *backend-env
+    # Lets running tasks finish after SIGTERM; unfinished ones are re-queued by retry_stalled_jobs.
+    stop_grace_period: 60s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ../frontend
+      args:
+        YTL_API_ORIGIN: http://api:8000
+    image: ytlead-web:${YTL_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${YTL_WEB_BIND:-127.0.0.1}:${YTL_WEB_PORT:-3000}:3000"
+    networks:
+      default:
+        # Fixed address: the API trusts X-Forwarded-For from this IP only.
+        ipv4_address: ${YTL_WEB_IP:-172.30.57.10}
+    depends_on:
+      api:
+        condition: service_healthy
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${YTL_DOCKER_SUBNET:-172.30.57.0/24}
+          # Dynamic addresses come from the upper half, so the static web IP can never be taken.
+          ip_range: ${YTL_DOCKER_IP_RANGE:-172.30.57.128/25}
+
+volumes:
+  pgdata:
+  storage:
