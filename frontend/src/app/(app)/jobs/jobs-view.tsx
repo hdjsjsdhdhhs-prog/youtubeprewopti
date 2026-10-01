@@ -15,6 +15,7 @@ const STATUSES = Object.keys(JOB_STATUS_LABELS) as JobStatus[];
 /** Human names for job types (backend JobType); unknown types fall back to the raw value. */
 export const JOB_TYPE_LABELS: Record<string, string> = {
   thumbnail_download: "Загрузка превью",
+  discovery: "Поиск каналов",
 };
 
 export function JobsView() {

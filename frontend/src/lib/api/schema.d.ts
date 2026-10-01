@@ -157,6 +157,110 @@ export interface paths {
         delete: operations["delete_query_api_projects__project_id__queries__query_id__delete"];
         options?: never;
         head?: never;
+        /** Update Query */
+        patch: operations["update_query_api_projects__project_id__queries__query_id__patch"];
+        trace?: never;
+    };
+    "/api/projects/{project_id}/niches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Project Niches */
+        get: operations["list_project_niches_api_projects__project_id__niches_get"];
+        /**
+         * Set Project Niches
+         * @description Replace the project's niche list (§2).
+         */
+        put: operations["set_project_niches_api_projects__project_id__niches_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxonomy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Taxonomy
+         * @description All niche / topic / subtopic nodes (flat; build the tree from ``parent_id``).
+         */
+        get: operations["list_taxonomy_api_taxonomy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxonomy/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Create
+         * @description Create nodes (one name per line) under ``parent_id``; existing names are returned, not duplicated.
+         */
+        post: operations["bulk_create_api_taxonomy_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/youtube/quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Youtube Quota
+         * @description Today's YouTube Data API quota usage as recorded by the ledger (resets at midnight Pacific Time).
+         */
+        get: operations["youtube_quota_api_youtube_quota_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/discovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Discovery
+         * @description Queue a ``discovery`` job for the project's queries. The response carries a quota estimate; a
+         *     run that does not fit today's remaining quota stops with ``quota_exceeded`` and can be resumed
+         *     after the reset (finished queries are not repeated).
+         */
+        post: operations["start_discovery_api_projects__project_id__discovery_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -167,7 +271,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Channels */
+        /**
+         * List Channels
+         * @description Channels discovered in the workspace's projects, filtered by §3 criteria (all optional, AND-ed).
+         *     ``niche`` / ``exclude_niche`` may repeat and include descendants (niche → topics → subtopics).
+         */
         get: operations["list_channels_api_channels_get"];
         put?: never;
         post?: never;
@@ -356,6 +464,7 @@ export interface components {
             last_fetched_at: string | null;
             /** Is Demo */
             is_demo: boolean;
+            metrics?: components["schemas"]["ChannelMetricsOut"] | null;
             /** Description */
             description: string;
             /** Custom Url */
@@ -368,6 +477,102 @@ export interface components {
             projects: components["schemas"]["ProjectRef"][];
             /** Videos Stored */
             videos_stored: number;
+            /** Niches */
+            niches: components["schemas"]["NicheRef"][];
+            /** Discoveries */
+            discoveries: components["schemas"]["DiscoveryOut"][];
+            /** Discoveries Total */
+            discoveries_total: number;
+        };
+        /**
+         * ChannelFilterSet
+         * @description Channel filters (§3). Used by ``GET /api/channels`` and stored as a project's ``filter_settings``.
+         *
+         *     Metric filters exclude channels without computed metrics (not fetched by discovery yet).
+         *     ``niche`` / ``exclude_niche`` match taxonomy nodes *with their descendants* through the queries a
+         *     channel was discovered by (Phase 3 adds AI classification as a second source).
+         */
+        ChannelFilterSet: {
+            /** Min Subscribers */
+            min_subscribers?: number | null;
+            /** Max Subscribers */
+            max_subscribers?: number | null;
+            /** Min Avg Views */
+            min_avg_views?: number | null;
+            /** Max Avg Views */
+            max_avg_views?: number | null;
+            /** Min Median Views */
+            min_median_views?: number | null;
+            /** Min Last Video Views */
+            min_last_video_views?: number | null;
+            /** Min Avg Views Recent */
+            min_avg_views_recent?: number | null;
+            /** Min Videos */
+            min_videos?: number | null;
+            /** Max Videos */
+            max_videos?: number | null;
+            /** Min Videos 7D */
+            min_videos_7d?: number | null;
+            /** Min Videos 30D */
+            min_videos_30d?: number | null;
+            /** Min Videos 90D */
+            min_videos_90d?: number | null;
+            /** Max Avg Upload Gap Days */
+            max_avg_upload_gap_days?: number | null;
+            /** Max Days Since Last Upload */
+            max_days_since_last_upload?: number | null;
+            /** Min Views To Subs */
+            min_views_to_subs?: number | null;
+            /** Min Upload Consistency */
+            min_upload_consistency?: number | null;
+            /** Country */
+            country?: string | null;
+            /** Language */
+            language?: string | null;
+            /** Niche */
+            niche?: number[];
+            /** Exclude Niche */
+            exclude_niche?: number[];
+        };
+        /** ChannelMetricsOut */
+        ChannelMetricsOut: {
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+            /** Window Videos */
+            window_videos: number;
+            /** Avg Views */
+            avg_views: number | null;
+            /** Median Views */
+            median_views: number | null;
+            /** Last Video Views */
+            last_video_views: number | null;
+            /** Avg Views Recent */
+            avg_views_recent: number | null;
+            /** Views To Subs Ratio */
+            views_to_subs_ratio: number | null;
+            /** Median Views To Subs Ratio */
+            median_views_to_subs_ratio: number | null;
+            /** Videos 7D */
+            videos_7d: number;
+            /** Videos 30D */
+            videos_30d: number;
+            /** Videos 90D */
+            videos_90d: number;
+            /** Avg Days Between Uploads */
+            avg_days_between_uploads: number | null;
+            /** Last Video At */
+            last_video_at: string | null;
+            /** Oldest Window Video At */
+            oldest_window_video_at: string | null;
+            /** Upload Consistency */
+            upload_consistency: number | null;
+            /** Views Trend */
+            views_trend: number | null;
+            /** Recent Views Velocity */
+            recent_views_velocity: number | null;
         };
         /** ChannelOut */
         ChannelOut: {
@@ -401,12 +606,61 @@ export interface components {
             last_fetched_at: string | null;
             /** Is Demo */
             is_demo: boolean;
+            metrics?: components["schemas"]["ChannelMetricsOut"] | null;
         };
         /**
          * ChannelSort
          * @enum {string}
          */
-        ChannelSort: "subscribers" | "views" | "videos" | "title" | "published" | "discovered";
+        ChannelSort: "subscribers" | "views" | "videos" | "title" | "published" | "discovered" | "avg_views" | "median_views" | "last_video" | "views_ratio" | "videos_30d";
+        /**
+         * DiscoveryOut
+         * @description Where/when/how the channel was found (§2, §50).
+         */
+        DiscoveryOut: {
+            project: components["schemas"]["ProjectRef"];
+            /** Query Id */
+            query_id: number | null;
+            /** Query Text */
+            query_text: string | null;
+            niche: components["schemas"]["NicheRef"] | null;
+            /** Method */
+            method: string;
+            /** Source Video Id */
+            source_video_id: number | null;
+            /**
+             * Discovered At
+             * Format: date-time
+             */
+            discovered_at: string;
+        };
+        /**
+         * DiscoveryStart
+         * @description Which queries to run: explicit ``query_ids``, or every pending/failed query of the project
+         *     (``include_done=true`` also re-runs finished ones).
+         */
+        DiscoveryStart: {
+            /** Query Ids */
+            query_ids?: number[] | null;
+            /**
+             * Include Done
+             * @default false
+             */
+            include_done: boolean;
+        };
+        /** DiscoveryStartResult */
+        DiscoveryStartResult: {
+            job: components["schemas"]["JobRunOut"] | null;
+            /** Created */
+            created: boolean;
+            /** Queries */
+            queries: number;
+            /** Quota Search Units */
+            quota_search_units: number;
+            /** Quota Max Units */
+            quota_max_units: number;
+            quota: components["schemas"]["QuotaOut"];
+        };
         /** EnqueueResult */
         EnqueueResult: {
             job: components["schemas"]["JobRunOut"] | null;
@@ -465,12 +719,12 @@ export interface components {
             started_at: string | null;
             /** Finished At */
             finished_at: string | null;
-            /** Params */
-            params: {
-                [key: string]: unknown;
-            };
             /** Result */
             result: {
+                [key: string]: unknown;
+            };
+            /** Params */
+            params: {
                 [key: string]: unknown;
             };
         };
@@ -514,6 +768,10 @@ export interface components {
             started_at: string | null;
             /** Finished At */
             finished_at: string | null;
+            /** Result */
+            result: {
+                [key: string]: unknown;
+            };
         };
         /**
          * JobStatus
@@ -532,6 +790,15 @@ export interface components {
             user: components["schemas"]["UserOut"];
             workspace: components["schemas"]["WorkspaceOut"];
             role: components["schemas"]["WorkspaceRole"];
+        };
+        /** NicheRef */
+        NicheRef: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Level */
+            level: string;
         };
         /** Page[ChannelOut] */
         Page_ChannelOut_: {
@@ -604,12 +871,14 @@ export interface components {
             published_after?: string | null;
             /** Videos To Analyze */
             videos_to_analyze?: number | null;
-            /** Filter Settings */
-            filter_settings?: {
-                [key: string]: unknown;
-            } | null;
+            filter_settings?: components["schemas"]["ChannelFilterSet"] | null;
             /** Name */
             name: string;
+        };
+        /** ProjectNichesUpdate */
+        ProjectNichesUpdate: {
+            /** Taxonomy Node Ids */
+            taxonomy_node_ids: number[];
         };
         /** ProjectOut */
         ProjectOut: {
@@ -687,10 +956,7 @@ export interface components {
             published_after?: string | null;
             /** Videos To Analyze */
             videos_to_analyze?: number | null;
-            /** Filter Settings */
-            filter_settings?: {
-                [key: string]: unknown;
-            } | null;
+            filter_settings?: components["schemas"]["ChannelFilterSet"] | null;
             /** Name */
             name?: string | null;
             status?: components["schemas"]["ProjectStatus"] | null;
@@ -698,12 +964,19 @@ export interface components {
         /**
          * QueryBulkImport
          * @description Either ``queries`` (list) or ``text`` (one query per line, e.g. pasted from a spreadsheet).
+         *
+         *     ``taxonomy_node_id`` tags every *new* query with a niche/topic (§2: remember by which niche a channel
+         *     was found); ``search_type=channel`` searches channels by topic instead of videos by keyword.
          */
         QueryBulkImport: {
             /** Queries */
             queries?: string[] | null;
             /** Text */
             text?: string | null;
+            /** Taxonomy Node Id */
+            taxonomy_node_id?: number | null;
+            /** @default video */
+            search_type: components["schemas"]["SearchType"];
         };
         /** QueryBulkResult */
         QueryBulkResult: {
@@ -725,6 +998,7 @@ export interface components {
             status: components["schemas"]["QueryStatus"];
             /** Taxonomy Node Id */
             taxonomy_node_id: number | null;
+            search_type: components["schemas"]["SearchType"];
             /** Last Run At */
             last_run_at: string | null;
             /** Results Count */
@@ -740,6 +1014,30 @@ export interface components {
          * @enum {string}
          */
         QueryStatus: "pending" | "running" | "done" | "failed";
+        /**
+         * QueryUpdate
+         * @description Only fields present in the body change; ``taxonomy_node_id: null`` removes the niche tag.
+         */
+        QueryUpdate: {
+            /** Taxonomy Node Id */
+            taxonomy_node_id?: number | null;
+            search_type?: components["schemas"]["SearchType"] | null;
+        };
+        /** QuotaOut */
+        QuotaOut: {
+            /** Provider */
+            provider: string | null;
+            /** Mode */
+            mode: string | null;
+            /** Quota Day */
+            quota_day: string | null;
+            /** Used */
+            used: number;
+            /** Limit */
+            limit: number;
+            /** Remaining */
+            remaining: number;
+        };
         /** RejectedLine */
         RejectedLine: {
             /** Line */
@@ -750,10 +1048,53 @@ export interface components {
             reason: string;
         };
         /**
+         * SearchType
+         * @enum {string}
+         */
+        SearchType: "video" | "channel";
+        /**
          * SortOrder
          * @enum {string}
          */
         SortOrder: "asc" | "desc";
+        /**
+         * TaxonomyBulkImport
+         * @description One name per line under ``parent_id`` (omitted = top-level niches).
+         */
+        TaxonomyBulkImport: {
+            /** Parent Id */
+            parent_id?: number | null;
+            /** Text */
+            text: string;
+        };
+        /** TaxonomyBulkResult */
+        TaxonomyBulkResult: {
+            /** Created */
+            created: number;
+            /** Duplicates */
+            duplicates: number;
+            /** Rejected */
+            rejected: components["schemas"]["RejectedLine"][];
+            /** Items */
+            items: components["schemas"]["TaxonomyNodeOut"][];
+        };
+        /**
+         * TaxonomyLevel
+         * @enum {string}
+         */
+        TaxonomyLevel: "niche" | "topic" | "subtopic";
+        /** TaxonomyNodeOut */
+        TaxonomyNodeOut: {
+            /** Id */
+            id: number;
+            /** Parent Id */
+            parent_id: number | null;
+            level: components["schemas"]["TaxonomyLevel"];
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+        };
         /** ThumbnailOut */
         ThumbnailOut: {
             fetch_status: components["schemas"]["FetchStatus"];
@@ -1221,6 +1562,216 @@ export interface operations {
             };
         };
     };
+    update_query_api_projects__project_id__queries__query_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+                query_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_project_niches_api_projects__project_id__niches_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomyNodeOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_project_niches_api_projects__project_id__niches_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectNichesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomyNodeOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_taxonomy_api_taxonomy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomyNodeOut"][];
+                };
+            };
+        };
+    };
+    bulk_create_api_taxonomy_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxonomyBulkImport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomyBulkResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    youtube_quota_api_youtube_quota_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotaOut"];
+                };
+            };
+        };
+    };
+    start_discovery_api_projects__project_id__discovery_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscoveryStart"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscoveryStartResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_channels_api_channels_get: {
         parameters: {
             query?: {
@@ -1228,7 +1779,24 @@ export interface operations {
                 q?: string | null;
                 min_subscribers?: number | null;
                 max_subscribers?: number | null;
+                min_avg_views?: number | null;
+                max_avg_views?: number | null;
+                min_median_views?: number | null;
+                min_last_video_views?: number | null;
+                min_avg_views_recent?: number | null;
+                min_videos?: number | null;
+                max_videos?: number | null;
+                min_videos_7d?: number | null;
+                min_videos_30d?: number | null;
+                min_videos_90d?: number | null;
+                max_avg_upload_gap_days?: number | null;
+                max_days_since_last_upload?: number | null;
+                min_views_to_subs?: number | null;
+                min_upload_consistency?: number | null;
                 country?: string | null;
+                language?: string | null;
+                niche?: number[] | null;
+                exclude_niche?: number[] | null;
                 sort?: components["schemas"]["ChannelSort"];
                 order?: components["schemas"]["SortOrder"];
                 limit?: number;
@@ -1424,6 +1992,8 @@ export interface operations {
             query?: {
                 status?: components["schemas"]["JobStatus"] | null;
                 type?: string | null;
+                /** @description Jobs whose params reference this project */
+                project_id?: number | null;
                 limit?: number;
                 offset?: number;
             };

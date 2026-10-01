@@ -129,23 +129,22 @@ docker run --rm -v ytlead_storage:/data:ro -v "$PWD":/backup alpine tar czf /bac
 | `postgres/initdb/10-ytlead.sh` | ✅ выполнен Git Bash против локального PostgreSQL 16 (временные роли/база, затем удалены): миграции от владельца проходят, `ytlead_app` читает/пишет и вызывает функции Procrastinate, `CREATE TABLE` запрещён. Внутри контейнера `postgres:16` — не запускался. |
 | Next standalone (`output: "standalone"`) | ✅ `next build` + `node .next/standalone/server.js` нативно: страницы и статика 200, `/api/health` через прокси — 200 |
 | IP клиента за прокси (`FORWARDED_ALLOW_IPS`) | ✅ цепочка «curl → Next standalone → uvicorn» на тестовой БД: без доверия к прокси все входы записываются с адресом прокси; с доверием — с адресом из `X-Forwarded-For`. Контракт закреплён тестами `tests/api/test_auth.py` (IP только от доверенного прокси, лимит по IP — на клиента). В compose (статический IP `web`) — не запускался. |
-| Сборка образов `backend/Dockerfile`, `frontend/Dockerfile`, запуск стека | ❌ **UNVERIFIED** — нет Docker Engine (Q-005). Закроется задачей `build-images` в CI или удалённым Docker-хостом (`DOCKER_HOST=ssh://…`). |
+| Сборка образов `backend/Dockerfile`, `frontend/Dockerfile`, запуск стека | ❌ **UNVERIFIED** локально — нет Docker Engine (Q-005, перепроверено 2026-10-01). Сборку образов выполняет job `build-images` в GitHub Actions; запуск всего стека (`docker compose up`) нигде не проверялся. |
 
-## 4. CI (`.gitlab-ci.yml`)
+## 4. CI (GitHub Actions, `.github/workflows/ci.yml`)
 
-| Задача | Stage | Что делает |
-|---|---|---|
-| `lint-backend` | lint | `ruff check .`, `mypy app` |
-| `lint-frontend` | lint | `npm run lint`, `npm run typecheck` |
-| `test-backend` | test | pytest на сервисе `postgres:16` (`lc_messages=C`), JUnit-отчёт, затем `alembic check` |
-| `test-frontend` | test | vitest |
-| `build-images` | build | `docker compose config` + `docker build` обоих образов + smoke-импорт приложения в образе. Нужен раннер с Docker-in-Docker (privileged). |
+Репозиторий — GitHub (`hdjsjsdhdhhs-prog/youtubeprewopti`), CI только там (GitLab CI удалён). Запуск: push в
+`main`, любой pull request, вручную (`workflow_dispatch`); новый запуск той же ветки отменяет предыдущий.
 
-Задачи запускаются только при изменениях в своей части репозитория; пайплайны — для MR и веток (без дублей).
-Проверено локально: YAML разбирается, у всех задач корректные stage/script; команды `test-backend`
-выполнены **только с переменными CI** (без `backend.conf`) — 137 passed, `alembic check` без расхождений;
-шаг `sed` + `docker compose config` из `build-images` выполнен в Git Bash; smoke-импорт — нативно.
-**Не проверено:** реальный запуск на GitLab-раннере (нет GitLab-проекта, Q-015) и `build-images` целиком.
+| Job | Что делает |
+|---|---|
+| `backend` | `pip install -e .[dev]`, `ruff check .`, `mypy app`; service-контейнер `postgres:16` → `ALTER SYSTEM SET lc_messages TO 'C'` (у service-контейнеров нельзя задать command), `pytest` (случайный `YTL_MASTER_KEY`, JUnit-артефакт), `alembic check` |
+| `frontend` | `npm ci`, `npm run lint`, `npm run typecheck`, `npm test` |
+| `build-images` | после `backend` и `frontend`: `docker compose config` с фиктивными секретами, `docker build` обоих образов, smoke-импорт `app.main`/`app.workers.queue`/`app.cli` в образе backend. На hosted-раннере Ubuntu Docker Engine есть — это единственное место, где проверяются Dockerfile'ы. |
+
+Проверено локально: YAML разбирается; команды jobs `backend`/`frontend` выполнены на dev-машине (включая
+`alembic check` против тестовой базы), `docker compose config` — с теми же подстановками.
+**Не проверено:** реальный запуск workflow на GitHub-раннере (будет после push) и `build-images` целиком.
 
 ## 5. Известные ограничения
 

@@ -22,7 +22,7 @@ from app.domains.media.models import FetchStatus, ImageAsset, ImageSource, Thumb
 from app.domains.media.service import asset_visible_to_workspace, store_image
 from app.domains.projects.models import ChannelDiscovery, DiscoveryMethod, SearchProject, SearchQuery
 from app.domains.youtube.models import Channel, Video
-from app.domains.youtube.schemas import ChannelSort, SortOrder
+from app.domains.youtube.schemas import ChannelFilterSet, ChannelSort, SortOrder
 from app.domains.youtube.service import list_channels
 from app.providers.thumbnails.mock import mock_thumbnail_bytes
 
@@ -37,7 +37,7 @@ async def _count(db, stmt) -> int:
 
 async def _visible_channels(db, workspace_id: int) -> list:
     items, _ = await list_channels(
-        db, workspace_id, project_id=None, q=None, min_subscribers=None, max_subscribers=None, country=None,
+        db, workspace_id, project_id=None, q=None, filters=ChannelFilterSet(),
         sort=ChannelSort.TITLE, order=SortOrder.ASC, limit=500, offset=0,
     )
     return items

@@ -55,8 +55,8 @@ channels ── videos ─┬─ video_stats_snapshots
 | `taxonomy_nodes` | parent_id, level ENUM(niche, topic, subtopic), name, slug | UNIQUE(parent_id, slug) |
 | `search_projects` | workspace_id, name, description, language, region_code, results_per_query, search_depth, published_after, videos_to_analyze, filter_settings JSONB, ideal_lead_profile_id, status | UNIQUE(workspace_id, name) |
 | `project_niches` | project_id, taxonomy_node_id | PK(project_id, taxonomy_node_id) |
-| `search_queries` | project_id, text, taxonomy_node_id NULL, status, last_run_at, results_count | UNIQUE(project_id, lower(text)) |
-| `discovery_runs` | project_id, job_run_id, queries_total, quota_estimated, quota_used, channels_found, channels_new | — |
+| `search_queries` | project_id, text, text_normalized, taxonomy_node_id NULL, search_type ENUM(video, channel) (Phase 2), status, last_run_at, results_count | UNIQUE(project_id, text_normalized) |
+| `discovery_runs` | **не создана** (Phase 2): история запусков — это `job_runs` с `type='discovery'`, `params.project_id`, итоги в `result` (фильтр `GET /api/jobs?project_id=`) | — |
 | `project_channels` | project_id, channel_id, first_discovered_at, last_discovered_at, discovery_count | PK(project_id, channel_id) |
 | `channel_discoveries` | project_id, channel_id, search_query_id NULL, source_video_id NULL, method ENUM(keyword_search, channel_search, related_video, manual_import, monitoring), discovered_at | UNIQUE(project_id, channel_id, search_query_id, source_video_id) NULLS NOT DISTINCT |
 
@@ -67,7 +67,7 @@ channels ── videos ─┬─ video_stats_snapshots
 | `channel_stats_snapshots` | channel_id, captured_on DATE, subscriber_count, view_count, video_count | UNIQUE(channel_id, captured_on) |
 | `videos` | channel_id, youtube_video_id, title, description, published_at, duration_seconds, is_short, category_id, tags TEXT[], view_count, like_count, comment_count, last_fetched_at, raw JSONB | UNIQUE(youtube_video_id); idx(channel_id, published_at DESC) |
 | `video_stats_snapshots` | video_id, captured_on, view_count, like_count, comment_count | UNIQUE(video_id, captured_on) |
-| `channel_metrics` | channel_id (PK), computed_at, window_videos, avg_views, median_views, last_video_views, avg_views_last_n, views_to_subs_ratio, median_views_to_subs_ratio, videos_7d, videos_30d, videos_90d, avg_days_between_uploads, days_since_last_upload, first_video_at, last_video_at, upload_consistency (0..1), views_trend (slope), recent_views_velocity | индексы на все фильтруемые колонки |
+| `channel_metrics` (Phase 2) | channel_id (PK), computed_at, window_videos (≤ 50 последних сохранённых видео), avg_views, median_views, last_video_views, avg_views_recent (последние 10), views_to_subs_ratio, median_views_to_subs_ratio, videos_7d, videos_30d, videos_90d, avg_days_between_uploads, last_video_at, oldest_window_video_at, upload_consistency (0..1), views_trend (новая половина окна к старой, +0.5 = +50 %), recent_views_velocity (просмотры/день видео за 30 дней) | CHECK(upload_consistency 0..1); idx(avg_views), idx(median_views), idx(last_video_at), idx(videos_30d), idx(views_to_subs_ratio). «Дней с последнего видео» не хранится — считается от `last_video_at`; «дата первого видео» недоступна без обхода всего плейлиста (квота), поэтому хранится только начало окна |
 | `channel_classifications` | channel_id, taxonomy_node_id, level, confidence, source ENUM(ai, manual, youtube_topic), ai_call_id, is_primary | UNIQUE(channel_id, taxonomy_node_id, source) |
 
 Фильтры §3 выражаются как SQL над `channels ⨝ channel_metrics ⨝ channel_classifications` (+ `lead_scores`, `channel_analyses` для §9), без материализации «FILTERED».
@@ -149,8 +149,8 @@ channels ── videos ─┬─ video_stats_snapshots
 |---|---|---|
 | `job_runs` | workspace_id, type, fingerprint, status, priority, queue, params JSONB, progress_total, progress_done, budget_usd, estimated_cost_usd, actual_cost_usd, procrastinate_job_id, parent_id, error_code, error_human, started_at, finished_at | partial UNIQUE(fingerprint) WHERE status IN (queued, running, retrying) |
 | `budgets` | workspace_id, scope ENUM(global, project, job_type), scope_ref, period ENUM(day, month, total), limit_usd, max_ai_operations | — |
-| `youtube_quota_ledger` | integration_id, quota_day DATE (Pacific), units_used, units_limit | UNIQUE(integration_id, quota_day) |
-| `provider_cache` | provider, cache_key, response JSONB, expires_at | UNIQUE(provider, cache_key) |
+| `youtube_quota_ledger` (Phase 2) | provider (`youtube_api` \| `youtube_mock`; таблицы `integrations` пока нет), quota_day DATE (Pacific, считается PostgreSQL: `(now() AT TIME ZONE 'America/Los_Angeles')::date`), units_used, units_limit, updated_at | PK(provider, quota_day); резервирование — атомарный upsert с `WHERE units_used + n <= limit` |
+| `provider_cache` | provider, cache_key, response JSONB, expires_at | UNIQUE(provider, cache_key) — **не создана**: вместо кэша ответов discovery не перезапрашивает каналы, обновлённые < `YTL_YOUTUBE_CHANNEL_REFRESH_HOURS` назад |
 | `integration_events` | integration_id, operation, http_status, error_code, latency_ms, created_at | idx(integration_id, created_at) |
 | `notifications` | workspace_id, user_id, kind, payload JSONB, channel, sent_at, read_at | — |
 

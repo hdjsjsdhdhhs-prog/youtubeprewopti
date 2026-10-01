@@ -17,6 +17,8 @@
 | Превью | `i.ytimg.com/vi/{id}/{maxresdefault|hqdefault|mqdefault}.jpg`, без квоты | — |
 | Ограничения | Email в «About» закрыт капчей — не извлекается (§18) | — |
 | Data retention | Условия YouTube API Services требуют периодического обновления/удаления сохранённых данных API — учесть политику обновления (Q-013) | to verify |
+| Поиск «связанных видео» | `search.list?relatedToVideoId` удалён из API (revision history, 2023-08) — способ `related_video` из ТЗ §2 через официальный API недоступен; используются поиск видео по ключевым словам и поиск каналов по тематике | to verify при наличии ключа |
+| Реализация (Phase 2) | `app/providers/youtube/http.py` (httpx, `fields` для экономии трафика), `mock.py` (офлайн, `demo-yt-…`); ошибки классифицируются по `error.errors[].reason`: `quotaExceeded`/`dailyLimitExceeded` → стоп без повторов, `rateLimitExceeded` → повтор, `keyInvalid` → «ключ недействителен», `accessNotConfigured` → «API не включён в GCP-проекте» | проверено тестами на respx; живые вызовы — **не проверены** (нет ключа) |
 
 ## OpenAI
 | Аспект | Значение | Статус |

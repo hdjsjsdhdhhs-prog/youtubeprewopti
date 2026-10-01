@@ -6,15 +6,18 @@ from fastapi import APIRouter, Query, Response, status
 
 from app.api.deps import DbSession, Paging, ReadAuth, WriteAuth
 from app.api.schemas import Page
-from app.domains.projects import service
+from app.domains.projects import service, taxonomy
 from app.domains.projects.models import ProjectStatus, QueryStatus
 from app.domains.projects.schemas import (
     ProjectCreate,
+    ProjectNichesUpdate,
     ProjectOut,
     ProjectUpdate,
     QueryBulkImport,
     QueryBulkResult,
     QueryOut,
+    QueryUpdate,
+    TaxonomyNodeOut,
 )
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -72,7 +75,32 @@ async def list_queries(
 async def bulk_import_queries(
     project_id: int, body: QueryBulkImport, ctx: WriteAuth, db: DbSession
 ) -> QueryBulkResult:
-    return await service.bulk_import_queries(db, ctx.workspace.id, ctx.user.id, project_id, body.lines())
+    return await service.bulk_import_queries(
+        db, ctx.workspace.id, ctx.user.id, project_id, body.lines(),
+        taxonomy_node_id=body.taxonomy_node_id, search_type=body.search_type,
+    )
+
+
+@router.patch("/{project_id}/queries/{query_id}", response_model=QueryOut)
+async def update_query(
+    project_id: int, query_id: int, body: QueryUpdate, ctx: WriteAuth, db: DbSession
+) -> QueryOut:
+    return await service.update_query(db, ctx.workspace.id, ctx.user.id, project_id, query_id, body)
+
+
+@router.get("/{project_id}/niches", response_model=list[TaxonomyNodeOut])
+async def list_project_niches(project_id: int, ctx: ReadAuth, db: DbSession) -> list[TaxonomyNodeOut]:
+    return await taxonomy.list_project_niches(db, ctx.workspace.id, project_id)
+
+
+@router.put("/{project_id}/niches", response_model=list[TaxonomyNodeOut])
+async def set_project_niches(
+    project_id: int, body: ProjectNichesUpdate, ctx: WriteAuth, db: DbSession
+) -> list[TaxonomyNodeOut]:
+    """Replace the project's niche list (§2)."""
+    return await taxonomy.set_project_niches(
+        db, ctx.workspace.id, ctx.user.id, project_id, body.taxonomy_node_ids
+    )
 
 
 @router.delete("/{project_id}/queries/{query_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -6,9 +6,9 @@
 |---|---|---|---|---|
 | Q-001 | Telegram-outreach: ручная отправка из черновика или MTProto user-аккаунты с принятием риска ограничений? | OPEN (решение владельца) | Phase 8, ADR-0010 | Bot API не может писать первым. До решения — только Bot для уведомлений + ManualSendProvider. |
 | Q-002 | Целевые рынки/юрисдикции (RU / EN / оба) | OPEN (решение владельца) | Промпты, язык офферов, compliance (38-ФЗ/152-ФЗ, GDPR, CAN-SPAM) | Архитектура поддерживает мультиязычность; тексты opt-out и шаблоны зависят от ответа. |
-| Q-003 | Достаточно ли квоты YouTube (10 000 units/день) для планируемых объёмов? | OPEN | Phase 2 | Оценка: ~100 search-страниц/день → до ~5 000 каналов/день (оценка). Нужен ключ; при нехватке — официальный запрос квоты. |
+| Q-003 | Достаточно ли квоты YouTube (10 000 units/день) для планируемых объёмов? | OPEN | Phase 2 | Оценка: ~100 search-страниц/день → до ~5 000 каналов/день (оценка). Phase 2: ledger, оценка до запуска, стоп и продолжение после сброса, пропуск свежих каналов. На mock-данных 3 запроса по 20 результатов ≈ 342 units (≈ 114 на запрос). Реальный расход — после ключа (`YTL_YOUTUBE_API_KEY`); при нехватке — официальный запрос квоты. |
 | Q-004 | Точные API ID моделей GPT-6 Astra/Sol/Luna, поддержка vision и structured outputs, цены | OPEN | Phase 3, AI_ARCHITECTURE | Проверить `GET /v1/models` + pricing после получения `OPENAI_API_KEY`. До этого — mock-провайдер и пометка `pricing unverified`. |
-| Q-005 | Docker Engine на dev-машине | BLOCKED — MANUAL ACTION REQUIRED | ADR-0013 | Нет VT-x/SLAT в ВМ. Нужно включить nested virtualization на хосте или использовать удалённый Docker-хост. |
+| Q-005 | Docker Engine на dev-машине | BLOCKED — MANUAL ACTION REQUIRED | ADR-0013 | Нет VT-x/SLAT в ВМ (перепроверено 2026-10-01: `VirtualizationFirmwareEnabled=False`, `SLAT=False`, `VMMonitorModeExtensions=False`). Изнутри ВМ не решается: включить nested virtualization на хосте или использовать удалённый Docker-хост. Сборка образов — в GitHub Actions (`build-images`). |
 | Q-006 | Email-провайдер: собственный SMTP или API-сервис? | OPEN | Phase 8 | Адаптер SMTP в любом случае; API-провайдер — отдельный адаптер. |
 | Q-007 | Один пользователь или команда? | DECIDED (для Phase 1) | ADR-0009 | Модель данных с workspace + RBAC; UI и onboarding — под одного owner. Расширение без миграции данных. |
 | Q-008 | Использование лица автора канала в сгенерированных превью | OPEN (решение владельца) | Phase 5 | Права на изображение, модерация image-моделей (возможны отказы). По умолчанию — генерация без точного воспроизведения лица, если не указано иначе. |
@@ -18,7 +18,7 @@
 | Q-012 | Производительность `next build` на 2 vCPU / 4 ГБ | DECIDED | Phase 1 | 2026-09-27: `next build` (Turbopack) ≈ 31 с полный цикл, компиляция 7–20 с. Приемлемо — ADR-0005 остаётся, Vite не нужен. |
 | Q-013 | Политика обновления/удаления данных по условиям YouTube API Services | OPEN | Phase 2, monitoring | Проверить актуальные Developer Policies; заложить периодический refresh и удаление устаревших данных. |
 | Q-014 | Масштабирование thumbnail analysis / generation throughput | OPEN | Phase 3, 5 | Лимиты OpenAI зависят от tier; конкуррентность воркера настраиваемая; очереди разделены. |
-| Q-015 | Git-репозиторий: локальный или проект на GitLab; identity для коммитов | INVESTIGATING | Весь проект, CI | 2026-09-26: локальный репозиторий инициализирован (`main`). Remote на GitLab и git identity — за владельцем; коммиты не создаются без указания владельца. |
+| Q-015 | Git-репозиторий: локальный или проект на GitLab; identity для коммитов | DECIDED | Весь проект, CI | 2026-10-01: репозиторий — GitHub (`hdjsjsdhdhhs-prog/youtubeprewopti`, `main`), CI только GitHub Actions (`.github/workflows/ci.yml`), GitLab CI удалён (ADR-0013). |
 
 ## Зафиксированные риски
 | Риск | Вероятность | Влияние | Митигирование |

@@ -1,6 +1,7 @@
 """Import all ORM models so that Alembic and relationship resolution see the full metadata."""
 
 from app.core.db import Base
+from app.domains.discovery.models import YouTubeQuotaLedger
 from app.domains.identity.models import (
     AuditLog,
     IdempotencyKey,
@@ -20,11 +21,17 @@ from app.domains.projects.models import (
     SearchQuery,
     TaxonomyNode,
 )
-from app.domains.youtube.models import Channel, ChannelStatsSnapshot, Video, VideoStatsSnapshot
+from app.domains.youtube.models import (
+    Channel,
+    ChannelMetrics,
+    ChannelStatsSnapshot,
+    Video,
+    VideoStatsSnapshot,
+)
 
 __all__ = [
-    "AuditLog", "Base", "Channel", "ChannelDiscovery", "ChannelStatsSnapshot", "IdempotencyKey", "ImageAsset",
-    "JobRun",
-    "ProjectChannel", "ProjectNiche", "SearchProject", "SearchQuery", "Secret", "TaxonomyNode", "Thumbnail",
-    "User", "UserSession", "Video", "VideoStatsSnapshot", "Workspace", "WorkspaceMember",
+    "AuditLog", "Base", "Channel", "ChannelDiscovery", "ChannelMetrics", "ChannelStatsSnapshot",
+    "IdempotencyKey", "ImageAsset", "JobRun", "ProjectChannel", "ProjectNiche", "SearchProject",
+    "SearchQuery", "Secret", "TaxonomyNode", "Thumbnail", "User", "UserSession", "Video",
+    "VideoStatsSnapshot", "Workspace", "WorkspaceMember", "YouTubeQuotaLedger",
 ]

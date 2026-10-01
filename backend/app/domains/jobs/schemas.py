@@ -30,11 +30,11 @@ class JobRunOut(BaseModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    result: dict[str, Any]  # small summary written by the handler (counts, ≤ 50 failures)
 
 
 class JobRunDetail(JobRunOut):
     params: dict[str, Any]
-    result: dict[str, Any]
 
 
 class EnqueueResult(BaseModel):

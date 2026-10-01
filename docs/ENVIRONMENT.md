@@ -66,6 +66,11 @@
 
 ### BLOCKED — MANUAL ACTION REQUIRED: Docker Engine (Linux-контейнеры)
 
+> Перепроверено 2026-10-01 (`Win32_Processor`: `VirtualizationFirmwareEnabled=False`,
+> `SecondLevelAddressTranslationExtensions=False`, `VMMonitorModeExtensions=False`) — без изменений, установить
+> Docker Engine для Linux-контейнеров на этой ВМ по-прежнему невозможно. Сборка образов проверяется job'ом
+> `build-images` в GitHub Actions (на hosted Ubuntu-раннере Docker есть).
+
 - **Причина:** ВМ не пробрасывает аппаратную виртуализацию гостю (`VirtualizationFirmwareEnabled=False`, `SecondLevelAddressTranslationExtensions=False`). Без VT-x/SLAT невозможны Hyper-V и WSL2, а значит, Linux-контейнеры (PostgreSQL, Redis, образы backend/frontend) запустить нельзя. Docker Desktop, кроме того, официально не поддерживает Windows Server.
 - **Изнутри ВМ это исправить невозможно.** Установлены только `docker` CLI и `docker compose` — они работают как клиент (`docker info` → нет доступного сервера).
 - **Что нужно сделать вручную (один из вариантов):**

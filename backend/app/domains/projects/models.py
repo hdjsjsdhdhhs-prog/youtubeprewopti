@@ -22,6 +22,7 @@ from sqlalchemy.types import TIMESTAMP
 
 from app.core.db import Base, IdMixin, TimestampMixin
 from app.core.types import pg_enum
+from app.providers.youtube.base import SearchType
 
 
 class TaxonomyLevel(StrEnum):
@@ -108,6 +109,10 @@ class SearchQuery(IdMixin, TimestampMixin, Base):
     text: Mapped[str] = mapped_column(String(300), nullable=False)
     text_normalized: Mapped[str] = mapped_column(String(300), nullable=False)
     taxonomy_node_id: Mapped[int | None] = mapped_column(ForeignKey("taxonomy_nodes.id", ondelete="SET NULL"))
+    search_type: Mapped[SearchType] = mapped_column(
+        pg_enum(SearchType, "search_type"), nullable=False, default=SearchType.VIDEO,
+        server_default=SearchType.VIDEO.value,
+    )
     status: Mapped[QueryStatus] = mapped_column(
         pg_enum(QueryStatus, "query_status"), nullable=False, default=QueryStatus.PENDING,
         server_default=QueryStatus.PENDING.value,

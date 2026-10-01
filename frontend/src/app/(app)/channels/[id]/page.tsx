@@ -16,7 +16,7 @@ import {
   type ChannelDetail,
   type Video,
 } from "@/lib/api/hooks";
-import { formatCount, formatDate, formatDateTime, formatDuration } from "@/lib/format";
+import { formatCount, formatDate, formatDateTime, formatDuration, formatRatio } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export default function ChannelDetailPage() {
@@ -64,7 +64,9 @@ function ChannelView({ id }: { id: number }) {
         }
       />
       <Stats channel={c} />
+      <Performance channel={c} />
       {c.description ? <p className="mt-3 max-w-3xl whitespace-pre-line text-sm text-zinc-600 dark:text-zinc-400">{c.description}</p> : null}
+      <Discoveries channel={c} />
       <Thumbnails channel={c} />
     </>
   );
@@ -109,6 +111,109 @@ function Stats({ channel: c }: { channel: ChannelDetail }) {
           ))}
         </div>
       ) : null}
+    </Card>
+  );
+}
+
+const METHOD_LABELS: Record<string, string> = {
+  keyword_search: "поиск видео",
+  channel_search: "поиск каналов",
+  related_video: "связанные видео",
+  manual_import: "ручной импорт",
+  monitoring: "мониторинг",
+  demo: "демо",
+};
+
+function percent(n: number | null | undefined): string {
+  if (n === null || n === undefined) return "—";
+  return `${n > 0 ? "+" : ""}${Math.round(n * 100)} %`;
+}
+
+/** §3/§4 performance & activity metrics computed from the newest stored videos. */
+function Performance({ channel: c }: { channel: ChannelDetail }) {
+  const m = c.metrics;
+  if (!m) {
+    return (
+      <Card className="mt-4">
+        <p className="text-sm text-zinc-500">Метрики появятся после сбора видео канала поиском.</p>
+      </Card>
+    );
+  }
+  const rows: [string, string, string?][] = [
+    ["Средние просмотры", formatCount(m.avg_views)],
+    ["Медиана просмотров", formatCount(m.median_views)],
+    ["Последнее видео", formatCount(m.last_video_views)],
+    ["Среднее последних 10", formatCount(m.avg_views_recent)],
+    ["Просмотры / подписчики", formatRatio(m.views_to_subs_ratio), "среднее; медиана " + formatRatio(m.median_views_to_subs_ratio)],
+    ["Динамика просмотров", percent(m.views_trend), "новая половина окна к старой"],
+    ["Скорость (30 дн.)", m.recent_views_velocity === null ? "—" : `${formatCount(Math.round(m.recent_views_velocity))}/день`],
+    ["Видео 7 / 30 / 90 дн.", `${m.videos_7d} / ${m.videos_30d} / ${m.videos_90d}`],
+    ["Интервал публикаций", m.avg_days_between_uploads === null ? "—" : `${formatRatio(m.avg_days_between_uploads)} дн.`],
+    ["Регулярность", m.upload_consistency === null ? "—" : formatRatio(m.upload_consistency), "1 — строго по графику"],
+    ["Дата последнего видео", formatDate(m.last_video_at)],
+    ["Окно расчёта", `${m.window_videos} видео с ${formatDate(m.oldest_window_video_at)}`],
+  ];
+  return (
+    <Card className="mt-4">
+      <h2 className="mb-2 text-sm font-semibold">
+        Performance <span className="font-normal text-zinc-500">· рассчитано {formatDateTime(m.computed_at)}</span>
+      </h2>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+        {rows.map(([k, v, hint]) => (
+          <div key={k} title={hint}>
+            <dt className="text-xs text-zinc-500">{k}</dt>
+            <dd className="tabular-nums">{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
+  );
+}
+
+/** Where, when and how the channel was found (§2, §50). */
+function Discoveries({ channel: c }: { channel: ChannelDetail }) {
+  if (c.discoveries.length === 0) return null;
+  return (
+    <Card className="mt-4">
+      <h2 className="mb-2 text-sm font-semibold">
+        Источники обнаружения <span className="font-normal text-zinc-500">({c.discoveries_total})</span>
+      </h2>
+      {c.niches.length > 0 ? (
+        <div className="mb-2 flex flex-wrap items-center gap-1">
+          <span className="text-xs text-zinc-500">Ниши:</span>
+          {c.niches.map((n) => (
+            <Badge key={n.id} tone="blue">
+              {n.name}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+      <table className="w-full text-sm">
+        <thead className="text-left text-xs uppercase tracking-wide text-zinc-500">
+          <tr>
+            <th className="py-1 font-medium">Когда</th>
+            <th className="py-1 font-medium">Проект</th>
+            <th className="py-1 font-medium">Запрос</th>
+            <th className="py-1 font-medium">Ниша</th>
+            <th className="py-1 font-medium">Способ</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+          {c.discoveries.map((d, i) => (
+            <tr key={`${d.project.id}-${d.query_id}-${d.method}-${i}`}>
+              <td className="py-1 pr-2 tabular-nums text-zinc-500">{formatDateTime(d.discovered_at)}</td>
+              <td className="py-1 pr-2">
+                <Link href={`/projects/${d.project.id}`} className="hover:underline">
+                  {d.project.name}
+                </Link>
+              </td>
+              <td className="py-1 pr-2">{d.query_text ?? "—"}</td>
+              <td className="py-1 pr-2">{d.niche?.name ?? "—"}</td>
+              <td className="py-1">{METHOD_LABELS[d.method] ?? d.method}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </Card>
   );
 }

@@ -9,11 +9,14 @@ import procrastinate
 from app.core.config import get_settings
 from app.core.db import get_sessionmaker
 from app.core.logging import get_logger
+from app.domains.discovery.quota import CommittingQuota
+from app.domains.discovery.service import run_discovery
 from app.domains.jobs import service as jobs
 from app.domains.jobs.service import JobQueue, JobType
 from app.domains.media.service import DownloadOutcome, download_thumbnail
 from app.providers.storage import LocalFSStorage, StorageBackend
 from app.providers.thumbnails import ThumbnailFetcher, open_thumbnail_fetcher
+from app.providers.youtube import YouTubeProvider, open_youtube_provider
 from app.workers.queue import queue_app
 from app.workers.registry import JobRunContext, job_task
 
@@ -51,6 +54,26 @@ async def thumbnail_download(ctx: JobRunContext) -> dict[str, Any]:
             await run(fetcher)
             fetcher_name = fetcher.name
     return {**counts, "total": len(video_ids), "fetcher": fetcher_name, "failures": failures}
+
+
+@job_task(name=JobType.DISCOVERY.value, queue=JobQueue.BULK)
+async def discovery(ctx: JobRunContext) -> dict[str, Any]:
+    """params: ``{"project_id": …, "query_ids": [...]}`` — see ``discovery.service.run_discovery``."""
+    settings = get_settings()
+    sessions = get_sessionmaker()
+
+    async def run(provider: YouTubeProvider) -> dict[str, Any]:
+        quota = CommittingQuota(sessions, provider.name, settings.youtube_daily_quota)
+        return await run_discovery(
+            sessions, provider, quota, settings, job_run_id=ctx.job_run_id, workspace_id=ctx.workspace_id,
+            params=ctx.params, progress=ctx.progress,
+        )
+
+    override: YouTubeProvider | None = ctx.resources.get("youtube_provider")
+    if override is not None:
+        return await run(override)
+    async with open_youtube_provider(settings) as provider:
+        return await run(provider)
 
 
 @queue_app.periodic(cron="* * * * *")

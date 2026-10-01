@@ -4,7 +4,19 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Boolean, Date, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Date,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import TIMESTAMP
@@ -78,6 +90,38 @@ class Video(IdMixin, TimestampMixin, Base):
     comment_count: Mapped[int | None] = mapped_column(BigInteger)
     last_fetched_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     raw: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+
+
+class ChannelMetrics(Base):
+    """Derived performance/activity metrics (§3), recomputed from the stored recent videos on every
+    discovery fetch. Time-relative counters (``videos_7d`` …) are as of ``computed_at``; recency filters
+    use ``last_video_at`` so they stay correct between refreshes."""
+
+    __tablename__ = "channel_metrics"
+    __table_args__ = (
+        CheckConstraint("upload_consistency BETWEEN 0 AND 1", name="upload_consistency_range"),
+        CheckConstraint("window_videos >= 0", name="window_videos_nonneg"),
+    )
+    channel_id: Mapped[int] = mapped_column(ForeignKey("channels.id", ondelete="CASCADE"), primary_key=True)
+    computed_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    window_videos: Mapped[int] = mapped_column(Integer, nullable=False)  # videos the metrics are based on
+    avg_views: Mapped[int | None] = mapped_column(BigInteger, index=True)
+    median_views: Mapped[int | None] = mapped_column(BigInteger, index=True)
+    last_video_views: Mapped[int | None] = mapped_column(BigInteger)
+    avg_views_recent: Mapped[int | None] = mapped_column(BigInteger)  # newest RECENT_N videos
+    views_to_subs_ratio: Mapped[float | None] = mapped_column(Float, index=True)
+    median_views_to_subs_ratio: Mapped[float | None] = mapped_column(Float)
+    videos_7d: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    videos_30d: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0", index=True
+    )
+    videos_90d: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    avg_days_between_uploads: Mapped[float | None] = mapped_column(Float)
+    last_video_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), index=True)
+    oldest_window_video_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    upload_consistency: Mapped[float | None] = mapped_column(Float)  # 1 = perfectly regular uploads
+    views_trend: Mapped[float | None] = mapped_column(Float)  # newer half vs older half: +0.5 = +50 %
+    recent_views_velocity: Mapped[float | None] = mapped_column(Float)  # views/day, videos of last 30 days
 
 
 class VideoStatsSnapshot(IdMixin, Base):

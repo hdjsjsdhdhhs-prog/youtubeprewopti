@@ -20,9 +20,11 @@ async def list_jobs(
     page: Paging,
     status: JobStatus | None = None,
     type: Annotated[str | None, Query(max_length=60)] = None,  # noqa: A002
+    project_id: Annotated[int | None, Query(description="Jobs whose params reference this project")] = None,
 ) -> Page[JobRunOut]:
     items, total = await service.list_job_runs(
-        db, ctx.workspace.id, status=status, type_=type, limit=page.limit, offset=page.offset
+        db, ctx.workspace.id, status=status, type_=type, project_id=project_id, limit=page.limit,
+        offset=page.offset,
     )
     return Page(items=items, total=total, limit=page.limit, offset=page.offset)
 

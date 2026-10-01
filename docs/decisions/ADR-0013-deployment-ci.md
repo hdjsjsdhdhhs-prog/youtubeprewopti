@@ -10,7 +10,7 @@ Accepted (с ограничением: Docker-запуск на dev-машине
 - **Dev (эта машина)**: нативно — PostgreSQL служба, `backend/.venv`, Node. Скрипты `scripts/dev.ps1` (api + worker + web), `scripts/setup.ps1` (venv, npm install, создание БД/пользователя, миграции).
 - **Production / Linux**: `docker-compose.yml` с сервисами `postgres` (16, `LC_MESSAGES=C`), `api`, `worker` (один образ backend), `web` (Next standalone), volume для `storage/` и данных PG. Multi-stage Dockerfile, non-root user.
 - Проверка compose на dev-машине: только `docker compose config` (синтаксис/интерполяция). Сборка и запуск образов — **UNVERIFIED** до появления Docker-хоста.
-- **CI (GitLab CI)**, когда появится репозиторий: `lint` (ruff, mypy, eslint, tsc), `test-backend` (pytest + service postgres:16), `test-frontend` (vitest), `build` (docker build), `e2e` (Playwright на compose — позже). CI также закроет пробел проверки Docker-сборки.
+- **CI — GitHub Actions** (`.github/workflows/ci.yml`; решение владельца 2026-10-01: репозиторий на GitHub, CI только там, `.gitlab-ci.yml` удалён): `backend` (ruff, mypy, pytest + service postgres:16 с `lc_messages=C`, alembic check), `frontend` (eslint, tsc, vitest), `build-images` (compose config + docker build + smoke-импорт), `e2e` (Playwright на compose — позже). На hosted Ubuntu-раннере есть Docker Engine, поэтому сборку Docker проверяет CI.
 - Kubernetes, Helm — не используются (§77K).
 
 ## Alternatives
@@ -30,7 +30,7 @@ Accepted (с ограничением: Docker-запуск на dev-машине
 Все пути через `pathlib`; конфигурация только через env (`.env.example`).
 
 ## Dependencies
-Docker Compose v5 (CLI установлен), GitLab CI runner (при наличии).
+Docker Compose v5 (CLI установлен), GitHub Actions (hosted `ubuntu-24.04`).
 
 ## Migration
 —

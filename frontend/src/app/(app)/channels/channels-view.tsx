@@ -2,19 +2,39 @@
 
 import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowDown, ArrowUp, ExternalLink, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ExternalLink, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, InlineError, LoadingState } from "@/components/states";
 import { DemoBadge } from "@/components/status-badges";
-import { Button, Input, PageHeader, Select } from "@/components/ui";
-import { useChannels, useProjects, type Channel, type ChannelFilters, type ChannelSort } from "@/lib/api/hooks";
-import { formatCount, formatDate } from "@/lib/format";
+import { Button, Card, Input, PageHeader, Select } from "@/components/ui";
+import {
+  useChannels,
+  useProject,
+  useProjects,
+  useTaxonomy,
+  useUpdateProject,
+  type Channel,
+  type ChannelFilters,
+  type ChannelSort,
+  type TaxonomyNode,
+} from "@/lib/api/hooks";
+import { formatCount, formatDate, formatRatio } from "@/lib/format";
+import { taxonomyOptions } from "@/lib/taxonomy";
 import { useUrlState, type UrlPatch } from "@/lib/url-state";
 import { cn } from "@/lib/utils";
 
-import { filtersFromParams, nextSort } from "./channel-filters";
+import {
+  CLEAR_FILTERS,
+  FLOAT_FILTERS,
+  INT_FILTERS,
+  activeFilterCount,
+  filterSetFromFilters,
+  filtersFromParams,
+  nextSort,
+  patchFromFilterSet,
+} from "./channel-filters";
 
 const features = tableFeatures({});
 const helper = createColumnHelper<typeof features, Channel>();
@@ -30,20 +50,40 @@ const columns = helper.columns([
     header: "Подписчики",
     cell: (info) => (info.row.original.subscribers_hidden ? <span title="Скрыто владельцем">скрыто</span> : formatCount(info.getValue())),
   }),
-  helper.accessor("view_count", { header: "Просмотры", cell: (info) => formatCount(info.getValue()) }),
+  helper.accessor((c) => c.metrics?.avg_views ?? null, {
+    id: "avg_views",
+    header: "Ср. просм.",
+    cell: (info) => formatCount(info.getValue()),
+  }),
+  helper.accessor((c) => c.metrics?.views_to_subs_ratio ?? null, {
+    id: "views_ratio",
+    header: "Просм./подп.",
+    cell: (info) => formatRatio(info.getValue()),
+  }),
+  helper.accessor((c) => c.metrics?.last_video_at ?? null, {
+    id: "last_video",
+    header: "Посл. видео",
+    cell: (info) => formatDate(info.getValue()),
+  }),
+  helper.accessor((c) => c.metrics?.videos_30d ?? null, {
+    id: "videos_30d",
+    header: "Видео/30д",
+    cell: (info) => formatCount(info.getValue()),
+  }),
   helper.accessor("video_count", { header: "Видео", cell: (info) => formatCount(info.getValue()) }),
   helper.accessor("country", { header: "Страна", cell: (info) => info.getValue() ?? "—" }),
-  helper.accessor("published_at", { header: "Создан", cell: (info) => formatDate(info.getValue()) }),
 ]);
 
 /** Column id -> layout + which server sort it maps to. */
 const LAYOUT: Record<string, { width: string; numeric?: boolean; sort?: ChannelSort }> = {
   title: { width: "minmax(16rem,1fr)", sort: "title" },
-  subscriber_count: { width: "8rem", numeric: true, sort: "subscribers" },
-  view_count: { width: "8rem", numeric: true, sort: "views" },
-  video_count: { width: "6rem", numeric: true, sort: "videos" },
-  country: { width: "5rem" },
-  published_at: { width: "8rem", sort: "published" },
+  subscriber_count: { width: "7.5rem", numeric: true, sort: "subscribers" },
+  avg_views: { width: "7.5rem", numeric: true, sort: "avg_views" },
+  views_ratio: { width: "7.5rem", numeric: true, sort: "views_ratio" },
+  last_video: { width: "8.5rem", sort: "last_video" },
+  videos_30d: { width: "6.5rem", numeric: true, sort: "videos_30d" },
+  video_count: { width: "5.5rem", numeric: true, sort: "videos" },
+  country: { width: "4.5rem" },
 };
 const GRID = { gridTemplateColumns: Object.values(LAYOUT).map((l) => l.width).join(" ") };
 
@@ -53,7 +93,7 @@ export function ChannelsView() {
   const channels = useChannels(filters);
   const rows = useMemo(() => channels.data?.pages.flatMap((p) => p.items) ?? EMPTY, [channels.data]);
   const total = channels.data?.pages[0]?.total ?? 0;
-  const hasFilters = ["project_id", "q", "min_subscribers", "max_subscribers", "country"].some((k) => params.has(k));
+  const hasFilters = Object.keys(CLEAR_FILTERS).some((k) => params.has(k));
 
   return (
     <div className="flex h-full flex-col">
@@ -102,8 +142,6 @@ export function ChannelsView() {
     </div>
   );
 }
-
-const CLEAR_FILTERS: UrlPatch = { project_id: null, q: null, min_subscribers: null, max_subscribers: null, country: null };
 
 function ChannelsTable({
   rows,
@@ -280,23 +318,12 @@ function FilterBar({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const numberField = (key: "min_subscribers" | "max_subscribers", placeholder: string) => (
-    <Input
-      key={`${key}-${filters[key] ?? ""}`}
-      type="number"
-      min={0}
-      inputMode="numeric"
-      aria-label={placeholder}
-      placeholder={placeholder}
-      defaultValue={filters[key] ?? ""}
-      className="w-36"
-      onBlur={(e) => onChange({ [key]: e.currentTarget.value.trim() || null })}
-      onKeyDown={(e) => e.key === "Enter" && onChange({ [key]: e.currentTarget.value.trim() || null })}
-    />
-  );
+  const [expanded, setExpanded] = useState(false);
+  const extra = activeFilterCount(filters);
 
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2">
+    <div className="mb-3 space-y-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Input
         ref={searchRef}
         type="search"
@@ -320,23 +347,204 @@ function FilterBar({
           </option>
         ))}
       </Select>
-      {numberField("min_subscribers", "Подписчиков от")}
-      {numberField("max_subscribers", "Подписчиков до")}
-      <Input
-        key={`country-${filters.country ?? ""}`}
-        aria-label="Страна"
-        placeholder="Страна (RU)"
-        maxLength={2}
-        defaultValue={filters.country ?? ""}
-        className="w-28 uppercase"
-        onBlur={(e) => onChange({ country: e.currentTarget.value.trim().toUpperCase() || null })}
-        onKeyDown={(e) => e.key === "Enter" && onChange({ country: e.currentTarget.value.trim().toUpperCase() || null })}
-      />
+      <NumberFilter filters={filters} name="min_subscribers" label="Подписчиков от" onChange={onChange} />
+      <NumberFilter filters={filters} name="max_subscribers" label="Подписчиков до" onChange={onChange} />
+      <Button variant="secondary" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+        <SlidersHorizontal className="size-4" aria-hidden /> Фильтры{extra ? ` (${extra})` : ""}
+      </Button>
       {hasFilters ? (
         <Button variant="ghost" onClick={() => onChange(CLEAR_FILTERS)}>
           <X className="size-4" aria-hidden /> Сбросить
         </Button>
       ) : null}
     </div>
+    {expanded ? <MoreFilters filters={filters} onChange={onChange} /> : null}
+    </div>
+  );
+}
+
+type NumericKey = (typeof INT_FILTERS)[number] | keyof typeof FLOAT_FILTERS;
+
+/** Uncontrolled number box: commits to the URL on blur / Enter (each URL change is a request). */
+function NumberFilter({
+  filters,
+  name,
+  label,
+  onChange,
+  step,
+  className = "w-36",
+}: {
+  filters: ChannelFilters;
+  name: NumericKey;
+  label: string;
+  onChange: (patch: UrlPatch) => void;
+  step?: string;
+  className?: string;
+}) {
+  const value = filters[name];
+  const commit = (raw: string) => onChange({ [name]: raw.trim() || null });
+  return (
+    <Input
+      key={`${name}-${value ?? ""}`}
+      type="number"
+      min={0}
+      step={step}
+      inputMode={step ? "decimal" : "numeric"}
+      aria-label={label}
+      placeholder={label}
+      title={label}
+      defaultValue={value ?? ""}
+      className={className}
+      onBlur={(e) => commit(e.currentTarget.value)}
+      onKeyDown={(e) => e.key === "Enter" && commit(e.currentTarget.value)}
+    />
+  );
+}
+
+function TextFilter({
+  filters,
+  name,
+  label,
+  onChange,
+  maxLength,
+  upper,
+}: {
+  filters: ChannelFilters;
+  name: "country" | "language";
+  label: string;
+  onChange: (patch: UrlPatch) => void;
+  maxLength: number;
+  upper?: boolean;
+}) {
+  const value = filters[name] ?? "";
+  const commit = (raw: string) => onChange({ [name]: (upper ? raw.trim().toUpperCase() : raw.trim()) || null });
+  return (
+    <Input
+      key={`${name}-${value}`}
+      aria-label={label}
+      placeholder={label}
+      maxLength={maxLength}
+      defaultValue={value}
+      className={cn("w-32", upper && "uppercase")}
+      onBlur={(e) => commit(e.currentTarget.value)}
+      onKeyDown={(e) => e.key === "Enter" && commit(e.currentTarget.value)}
+    />
+  );
+}
+
+const FILTER_GROUPS: { title: string; fields: { name: NumericKey; label: string; step?: string }[] }[] = [
+  {
+    title: "Просмотры",
+    fields: [
+      { name: "min_avg_views", label: "Средние от" },
+      { name: "max_avg_views", label: "Средние до" },
+      { name: "min_median_views", label: "Медиана от" },
+      { name: "min_last_video_views", label: "Последнее видео от" },
+      { name: "min_avg_views_recent", label: "Последние 10 видео от" },
+      { name: "min_views_to_subs", label: "Просм./подп. от", step: "0.01" },
+    ],
+  },
+  {
+    title: "Активность",
+    fields: [
+      { name: "max_days_since_last_upload", label: "Посл. видео не старше, дн." },
+      { name: "min_videos_7d", label: "Видео за 7 дн. от" },
+      { name: "min_videos_30d", label: "Видео за 30 дн. от" },
+      { name: "min_videos_90d", label: "Видео за 90 дн. от" },
+      { name: "max_avg_upload_gap_days", label: "Интервал публикаций до, дн.", step: "0.5" },
+      { name: "min_upload_consistency", label: "Регулярность от (0–1)", step: "0.05" },
+    ],
+  },
+  {
+    title: "Канал",
+    fields: [
+      { name: "min_videos", label: "Видео на канале от" },
+      { name: "max_videos", label: "Видео на канале до" },
+    ],
+  },
+];
+
+function MoreFilters({ filters, onChange }: { filters: ChannelFilters; onChange: (patch: UrlPatch) => void }) {
+  const taxonomy = useTaxonomy();
+  const nodes = taxonomy.data ?? [];
+  const project = useProject(filters.project_id ?? 0, filters.project_id !== undefined);
+  const update = useUpdateProject(filters.project_id ?? 0);
+  const saved = project.data?.filter_settings ?? {};
+
+  return (
+    <Card className="space-y-3">
+      {FILTER_GROUPS.map((g) => (
+        <fieldset key={g.title} className="flex flex-wrap items-center gap-2">
+          <legend className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">{g.title}</legend>
+          {g.fields.map((fl) => (
+            <NumberFilter key={fl.name} filters={filters} name={fl.name} label={fl.label} step={fl.step}
+              onChange={onChange} className="w-48" />
+          ))}
+        </fieldset>
+      ))}
+      <fieldset className="flex flex-wrap items-center gap-2">
+        <legend className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">Рынок и ниши</legend>
+        <TextFilter filters={filters} name="country" label="Страна (RU)" maxLength={2} upper onChange={onChange} />
+        <TextFilter filters={filters} name="language" label="Язык (ru)" maxLength={20} onChange={onChange} />
+        <NicheSelect label="Ниша: включить" nodes={nodes} value={filters.niche ?? []}
+          onChange={(ids) => onChange({ niche: ids.join(",") || null })} />
+        <NicheSelect label="Ниша: исключить" nodes={nodes} value={filters.exclude_niche ?? []}
+          onChange={(ids) => onChange({ exclude_niche: ids.join(",") || null })} />
+      </fieldset>
+      <div className="flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-3 text-sm dark:border-zinc-800">
+        {filters.project_id !== undefined && project.data ? (
+          <>
+            <span className="text-xs text-zinc-500">Фильтры проекта «{project.data.name}»:</span>
+            <Button size="sm" variant="secondary" disabled={Object.keys(saved).length === 0}
+              onClick={() => onChange(patchFromFilterSet(saved))}>
+              Применить сохранённые
+            </Button>
+            <Button size="sm" variant="secondary" disabled={update.isPending}
+              onClick={() => update.mutate({ filter_settings: filterSetFromFilters(filters) })}>
+              Сохранить текущие в проект
+            </Button>
+            {update.isSuccess ? <span role="status" className="text-xs text-emerald-700">Сохранено</span> : null}
+            <InlineError error={update.error} />
+          </>
+        ) : (
+          <span className="text-xs text-zinc-500">
+            Выберите проект, чтобы применить или сохранить его фильтры. Фильтры по метрикам скрывают каналы, у
+            которых метрики ещё не посчитаны.
+          </span>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** Multi-select of niches/topics; selecting a niche also matches its topics and subtopics (server side). */
+function NicheSelect({
+  label,
+  nodes,
+  value,
+  onChange,
+}: {
+  label: string;
+  nodes: TaxonomyNode[];
+  value: number[];
+  onChange: (ids: number[]) => void;
+}) {
+  const options = useMemo(() => taxonomyOptions(nodes), [nodes]);
+  return (
+    <Select
+      multiple
+      aria-label={label}
+      title={`${label} (Ctrl/Cmd — несколько)`}
+      value={value.map(String)}
+      onChange={(e) => onChange(Array.from(e.currentTarget.selectedOptions, (o) => Number(o.value)))}
+      className="h-20 w-56 py-1"
+    >
+      {options.length === 0 ? <option disabled>Ниш нет — создайте на странице «Ниши»</option> : null}
+      {options.map((o) => (
+        <option key={o.id} value={o.id}>
+          {o.label}
+        </option>
+      ))}
+    </Select>
   );
 }

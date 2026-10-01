@@ -38,6 +38,7 @@ class JobType(StrEnum):
     """Job type == Procrastinate task name registered by the worker (``app/workers/tasks.py``)."""
 
     THUMBNAIL_DOWNLOAD = "thumbnail_download"
+    DISCOVERY = "discovery"
 
 
 # Composite literal matches procrastinate_job_to_defer_v1
@@ -214,12 +215,15 @@ async def list_job_runs(
     type_: str | None,
     limit: int,
     offset: int,
+    project_id: int | None = None,
 ) -> tuple[list[JobRunOut], int]:
     where = [JobRun.workspace_id == workspace_id]
     if status is not None:
         where.append(JobRun.status == status)
     if type_:
         where.append(JobRun.type == type_)
+    if project_id is not None:
+        where.append(JobRun.params["project_id"].as_integer() == project_id)
     total = await db.scalar(select(func.count()).select_from(JobRun).where(*where)) or 0
     rows = await db.scalars(
         select(JobRun)

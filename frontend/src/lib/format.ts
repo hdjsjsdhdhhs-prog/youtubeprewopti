@@ -16,6 +16,12 @@ export function formatDate(iso: string | null | undefined): string {
   return iso ? dateOnly.format(new Date(iso)) : "—";
 }
 
+/** Ratio such as views/subscribers: 0.553 -> "0,55", 12.4 -> "12,4". */
+export function formatRatio(n: number | null | undefined): string {
+  if (n === null || n === undefined) return "—";
+  return n.toLocaleString("ru-RU", { maximumFractionDigits: n >= 10 ? 1 : 2 });
+}
+
 /** Video length as on YouTube: "4:05", "1:02:03". */
 export function formatDuration(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || seconds < 0) return "—";

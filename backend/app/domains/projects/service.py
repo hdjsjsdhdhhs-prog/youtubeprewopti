@@ -12,7 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, NotFoundError
 from app.domains.identity.service import audit
-from app.domains.projects.models import ProjectChannel, ProjectStatus, QueryStatus, SearchProject, SearchQuery
+from app.domains.projects.models import (
+    ProjectChannel,
+    ProjectStatus,
+    QueryStatus,
+    SearchProject,
+    SearchQuery,
+    SearchType,
+    TaxonomyNode,
+)
 from app.domains.projects.schemas import (
     MAX_QUERY_LENGTH,
     ProjectCreate,
@@ -20,6 +28,7 @@ from app.domains.projects.schemas import (
     ProjectUpdate,
     QueryBulkResult,
     QueryOut,
+    QueryUpdate,
     RejectedLine,
 )
 
@@ -204,11 +213,24 @@ async def list_queries(
     return [QueryOut.model_validate(q) for q in rows], total
 
 
+async def _ensure_node(db: AsyncSession, node_id: int | None) -> None:
+    if node_id is not None and await db.get(TaxonomyNode, node_id) is None:
+        raise NotFoundError("Niche/topic not found")
+
+
 async def bulk_import_queries(
-    db: AsyncSession, workspace_id: int, actor_id: int, project_id: int, lines: list[str]
+    db: AsyncSession,
+    workspace_id: int,
+    actor_id: int,
+    project_id: int,
+    lines: list[str],
+    *,
+    taxonomy_node_id: int | None = None,
+    search_type: SearchType = SearchType.VIDEO,
 ) -> QueryBulkResult:
     """Idempotent import: duplicates (within the batch or already in the project) are skipped."""
     await get_project(db, workspace_id, project_id)
+    await _ensure_node(db, taxonomy_node_id)
     rejected: list[RejectedLine] = []
     batch: dict[str, str] = {}  # normalized -> display
     duplicates = 0
@@ -229,7 +251,11 @@ async def bulk_import_queries(
     if batch:
         result = await db.scalars(
             insert(SearchQuery)
-            .values([{"project_id": project_id, "text": t, "text_normalized": n} for n, t in batch.items()])
+            .values([
+                {"project_id": project_id, "text": t, "text_normalized": n,
+                 "taxonomy_node_id": taxonomy_node_id, "search_type": search_type}
+                for n, t in batch.items()
+            ])
             .on_conflict_do_nothing(index_elements=["project_id", "text_normalized"])
             .returning(SearchQuery)
         )
@@ -252,6 +278,32 @@ async def bulk_import_queries(
         rejected=rejected,
         items=[QueryOut.model_validate(q) for q in created],
     )
+
+
+async def update_query(
+    db: AsyncSession, workspace_id: int, actor_id: int, project_id: int, query_id: int, data: QueryUpdate
+) -> QueryOut:
+    await get_project(db, workspace_id, project_id)
+    query = await db.scalar(
+        select(SearchQuery).where(SearchQuery.id == query_id, SearchQuery.project_id == project_id)
+    )
+    if query is None:
+        raise NotFoundError("Query not found")
+    changes = data.model_dump(exclude_unset=True)
+    if changes.get("search_type", "") is None:
+        changes.pop("search_type")
+    if "taxonomy_node_id" in changes:
+        await _ensure_node(db, changes["taxonomy_node_id"])
+    before = {k: getattr(query, k) for k in changes}
+    for key, value in changes.items():
+        setattr(query, key, value)
+    await db.flush()
+    if changes:
+        await audit(
+            db, "query.updated", workspace_id=workspace_id, actor_user_id=actor_id,
+            entity_type="search_query", entity_id=query.id, diff={"before": before, "after": changes},
+        )
+    return QueryOut.model_validate(query)
 
 
 async def delete_query(

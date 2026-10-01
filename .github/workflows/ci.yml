@@ -1,0 +1,122 @@
+# CI (ADR-0013): lint → test → build on GitHub-hosted Linux runners.
+# The Ubuntu runner has a Docker Engine, so `build-images` really builds both images
+# (this is the only place Docker artefacts are verified — the dev VM cannot run Linux containers, Q-005).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  # --- backend --------------------------------------------------------------------------------
+  backend:
+    name: backend (ruff, mypy, pytest, alembic check)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ytlead_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      # Throwaway service database; tests recreate the schema via Alembic (downgrade base → upgrade head).
+      YTL_TEST_DATABASE_URL: postgresql+psycopg://postgres:ci-only-password@localhost:5432/ytlead_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - run: pip install -e ".[dev]"
+      - name: ruff
+        run: ruff check .
+      - name: mypy
+        run: mypy app
+      - name: lc_messages=C
+        # Service containers cannot take a command line; Procrastinate recognises unique violations
+        # by the English message text (ADR-0003), so pin it explicitly like in production.
+        env:
+          PGPASSWORD: ci-only-password
+        run: |
+          psql -h localhost -U postgres -d ytlead_test -v ON_ERROR_STOP=1 \
+            -c "ALTER SYSTEM SET lc_messages TO 'C'" -c "SELECT pg_reload_conf()"
+      - name: pytest
+        run: |
+          # Random per-job key: secrets encrypted in tests are never meant to be read again.
+          export YTL_MASTER_KEY="$(python -c 'import base64, os; print(base64.b64encode(os.urandom(32)).decode())')"
+          pytest -q --junitxml=report.xml
+      - name: alembic check (models and migrations agree)
+        run: |
+          export YTL_MASTER_KEY=ci
+          YTL_DATABASE_URL="$YTL_TEST_DATABASE_URL" YTL_MIGRATION_DATABASE_URL="$YTL_TEST_DATABASE_URL" alembic check
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: backend-junit
+          path: backend/report.xml
+          if-no-files-found: ignore
+
+  # --- frontend -------------------------------------------------------------------------------
+  frontend:
+    name: frontend (eslint, tsc, vitest)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  # --- images ---------------------------------------------------------------------------------
+  build-images:
+    name: docker images + compose config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v7
+      - name: compose config (syntax + required variables, nothing is started)
+        run: |
+          sed -e 's/^\(POSTGRES_PASSWORD\|YTL_DB_OWNER_PASSWORD\|YTL_DB_APP_PASSWORD\)=$/\1=ci/' \
+              -e 's/^YTL_MASTER_KEY=$/YTL_MASTER_KEY=ci/' infrastructure/.env.example > /tmp/compose.env
+          docker compose -f infrastructure/docker-compose.yml --env-file /tmp/compose.env config -q
+      - name: build backend image
+        run: docker build --pull -t "ytlead-backend:${GITHUB_SHA::8}" backend
+      - name: build web image
+        run: docker build --pull -t "ytlead-web:${GITHUB_SHA::8}" --build-arg YTL_API_ORIGIN=http://api:8000 frontend
+      - name: smoke-import the backend image
+        run: |
+          docker run --rm -e YTL_DATABASE_URL=postgresql+psycopg://x:x@localhost/x -e YTL_MASTER_KEY=ci \
+            "ytlead-backend:${GITHUB_SHA::8}" python -c "import app.main, app.workers.queue, app.cli"

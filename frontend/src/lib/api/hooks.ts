@@ -24,6 +24,13 @@ export type ChannelSort = Schemas["ChannelSort"];
 export type SortOrder = Schemas["SortOrder"];
 export type Job = Schemas["JobRunOut"];
 export type JobStatus = Schemas["JobStatus"];
+export type ChannelMetrics = Schemas["ChannelMetricsOut"];
+export type ChannelFilterSet = Schemas["ChannelFilterSet"];
+export type TaxonomyNode = Schemas["TaxonomyNodeOut"];
+export type TaxonomyLevel = Schemas["TaxonomyLevel"];
+export type SearchType = Schemas["SearchType"];
+export type Quota = Schemas["QuotaOut"];
+export type DiscoveryStartResult = Schemas["DiscoveryStartResult"];
 
 export const ACTIVE_JOB_STATUSES: ReadonlySet<JobStatus> = new Set(["queued", "running", "retrying"]);
 
@@ -38,8 +45,12 @@ export const qk = {
   channelList: (f: ChannelFilters) => ["channels", "list", f] as const,
   channel: (id: number) => ["channels", "detail", id] as const,
   channelVideos: (id: number, offset: number) => ["channels", "detail", id, "videos", offset] as const,
+  projectNiches: (id: number) => ["projects", "detail", id, "niches"] as const,
   jobs: ["jobs"] as const,
-  jobList: (p: { status?: JobStatus; type?: string; offset: number }) => ["jobs", "list", p] as const,
+  jobList: (p: { status?: JobStatus; type?: string; project_id?: number; offset: number; limit: number }) =>
+    ["jobs", "list", p] as const,
+  taxonomy: ["taxonomy"] as const,
+  quota: ["youtube", "quota"] as const,
 };
 
 // --- auth -------------------------------------------------------------------------------------
@@ -85,10 +96,11 @@ export function useProjects(p: { status?: ProjectStatus; offset: number }) {
   });
 }
 
-export function useProject(id: number) {
+export function useProject(id: number, enabled = true) {
   return useQuery({
     queryKey: qk.project(id),
     queryFn: () => unwrap(api.GET("/api/projects/{project_id}", { params: { path: { project_id: id } } })),
+    enabled,
   });
 }
 
@@ -141,18 +153,93 @@ export function useProjectQueries(id: number, offset: number) {
   });
 }
 
+export type QueryImport = { text: string; taxonomy_node_id?: number | null; search_type: SearchType };
+
 export function useImportQueries(id: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (text: string) =>
+    mutationFn: (body: QueryImport) =>
       unwrap(
         api.POST("/api/projects/{project_id}/queries/bulk", {
           params: { path: { project_id: id } },
-          body: { text },
+          body,
         }),
       ),
     // Refreshes both the queries list and queries_count on the project.
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.projects }),
+  });
+}
+
+export function useUpdateQuery(projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ queryId, body }: { queryId: number; body: Schemas["QueryUpdate"] }) =>
+      unwrap(
+        api.PATCH("/api/projects/{project_id}/queries/{query_id}", {
+          params: { path: { project_id: projectId, query_id: queryId } },
+          body,
+        }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.projects }),
+  });
+}
+
+// --- niches (taxonomy) ------------------------------------------------------------------------
+
+export function useTaxonomy() {
+  return useQuery({
+    queryKey: qk.taxonomy,
+    queryFn: () => unwrap(api.GET("/api/taxonomy")),
+    staleTime: 60_000,
+  });
+}
+
+export function useCreateTaxonomy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Schemas["TaxonomyBulkImport"]) => unwrap(api.POST("/api/taxonomy/bulk", { body })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.taxonomy }),
+  });
+}
+
+export function useProjectNiches(id: number) {
+  return useQuery({
+    queryKey: qk.projectNiches(id),
+    queryFn: () => unwrap(api.GET("/api/projects/{project_id}/niches", { params: { path: { project_id: id } } })),
+  });
+}
+
+export function useSetProjectNiches(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (taxonomy_node_ids: number[]) =>
+      unwrap(
+        api.PUT("/api/projects/{project_id}/niches", {
+          params: { path: { project_id: id } },
+          body: { taxonomy_node_ids },
+        }),
+      ),
+    onSuccess: (niches) => qc.setQueryData(qk.projectNiches(id), niches),
+  });
+}
+
+// --- discovery --------------------------------------------------------------------------------
+
+export function useYoutubeQuota() {
+  return useQuery({ queryKey: qk.quota, queryFn: () => unwrap(api.GET("/api/youtube/quota")), staleTime: 10_000 });
+}
+
+export function useStartDiscovery(projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Schemas["DiscoveryStart"]) =>
+      unwrap(api.POST("/api/projects/{project_id}/discovery", { params: { path: { project_id: projectId } }, body })),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: qk.jobs }),
+        qc.invalidateQueries({ queryKey: qk.quota }),
+        qc.invalidateQueries({ queryKey: qk.project(projectId) }),
+      ]),
   });
 }
 
@@ -171,12 +258,10 @@ export function useDeleteQuery(projectId: number) {
 
 // --- channels ---------------------------------------------------------------------------------
 
-export type ChannelFilters = {
+/** List filters = the §3 filter set (also stored per project) + search, project scope and sorting. */
+export type ChannelFilters = Partial<ChannelFilterSet> & {
   project_id?: number;
   q?: string;
-  min_subscribers?: number;
-  max_subscribers?: number;
-  country?: string;
   sort: ChannelSort;
   order: SortOrder;
 };
@@ -240,10 +325,10 @@ export function useDownloadChannelThumbnails(id: number) {
 export const JOBS_PAGE = 50;
 const JOBS_POLL_MS = 2000;
 
-export function useJobs(p: { status?: JobStatus; type?: string; offset: number }) {
+export function useJobs(p: { status?: JobStatus; type?: string; project_id?: number; offset: number }, limit = JOBS_PAGE) {
   return useQuery({
-    queryKey: qk.jobList(p),
-    queryFn: () => unwrap(api.GET("/api/jobs", { params: { query: { ...p, limit: JOBS_PAGE } } })),
+    queryKey: qk.jobList({ ...p, limit }),
+    queryFn: () => unwrap(api.GET("/api/jobs", { params: { query: { ...p, limit } } })),
     placeholderData: keepPreviousData,
     // Poll only while something on the page can still change.
     refetchInterval: (query) =>

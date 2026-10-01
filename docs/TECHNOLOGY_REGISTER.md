@@ -44,7 +44,7 @@
 | E2E | Playwright | 1.63.x | E2E | — | 0014 |
 | Lint/format (Py) | ruff, mypy | 0.16 / 2.3 | Качество | — | 0002 |
 | Containers | Docker Compose | v5.5.1 (CLI) | Production deploy | Engine на dev недоступен | 0013 |
-| CI | GitLab CI | — | Проверки | Когда появится репозиторий | 0013 |
+| CI | GitHub Actions | checkout/setup-python/setup-node v7, upload-artifact v7 | Проверки, сборка Docker-образов | Репозиторий на GitHub (2026-10-01) | 0013 |
 | VCS | Git | 2.55.0 | Контроль версий | — | — |
 
 **Сознательно не используются:** Redis, Celery, RabbitMQ, Kafka, Elasticsearch, ClickHouse, Kubernetes, LangChain, Prometheus/Grafana (обоснования — в соответствующих ADR).

@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     # Unset => "mock" in demo mode, "http" otherwise.
     thumbnail_fetcher: Literal["http", "mock"] | None = None
 
+    # YouTube discovery (ADR-0008): "api" = YouTube Data API v3 (needs youtube_api_key), "mock" = offline.
+    # Unset => "mock" in demo mode, "api" when a key is configured, otherwise not configured.
+    youtube_provider: Literal["api", "mock"] | None = None
+    youtube_daily_quota: int = 10_000  # units per Pacific-time day (Google default for a GCP project)
+    # Channels fetched more recently than this are not re-fetched by discovery (saves quota).
+    youtube_channel_refresh_hours: int = 24
+
     # Worker (Procrastinate, ADR-0003)
     worker_concurrency: int = 2
     worker_retry_max_attempts: int = 5  # total runs, including the first one
@@ -71,7 +78,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = True
 
-    @field_validator("youtube_api_key", "openai_api_key", "thumbnail_fetcher", mode="before")
+    @field_validator(
+        "youtube_api_key", "openai_api_key", "thumbnail_fetcher", "youtube_provider", mode="before"
+    )
     @classmethod
     def _empty_to_none(cls, v: object) -> object:
         return None if v in ("", None) else v
@@ -85,6 +94,14 @@ class Settings(BaseSettings):
         if self.thumbnail_fetcher is not None:
             return self.thumbnail_fetcher
         return "mock" if self.demo_mode else "http"
+
+    @property
+    def effective_youtube_provider(self) -> Literal["api", "mock"] | None:
+        if self.youtube_provider is not None:
+            return self.youtube_provider
+        if self.demo_mode:
+            return "mock"
+        return "api" if self.youtube_api_key is not None else None
 
 
 def _env_file() -> str | None:
