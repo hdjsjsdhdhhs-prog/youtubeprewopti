@@ -13,7 +13,7 @@ from app.domains.discovery.quota import CommittingQuota
 from app.domains.discovery.service import run_discovery
 from app.domains.jobs import service as jobs
 from app.domains.jobs.service import JobQueue, JobType
-from app.domains.media.service import DownloadOutcome, download_thumbnail
+from app.domains.media.service import DownloadOutcome, MetricsOutcome, ingest_thumbnail
 from app.providers.storage import LocalFSStorage, StorageBackend
 from app.providers.thumbnails import ThumbnailFetcher, open_thumbnail_fetcher
 from app.providers.youtube import YouTubeProvider, open_youtube_provider
@@ -26,23 +26,26 @@ MAX_REPORTED_FAILURES = 50
 
 @job_task(name=JobType.THUMBNAIL_DOWNLOAD.value, queue=JobQueue.BULK)
 async def thumbnail_download(ctx: JobRunContext) -> dict[str, Any]:
-    """params: ``{"video_ids": [...]}``. Each thumbnail is committed on its own, so a retried job
-    resumes where it stopped (already stored thumbnails are skipped)."""
+    """params: ``{"video_ids": [...], "project_id" | "channel_id": …}``. Downloads each thumbnail (if not
+    stored yet) and computes its deterministic metrics. Each video is committed on its own, so a retried
+    job resumes where it stopped (stored thumbnails / current metrics are skipped)."""
     settings = get_settings()
     storage: StorageBackend = ctx.resources.get("storage") or LocalFSStorage(settings.storage_path)
     video_ids: list[int] = [int(v) for v in ctx.params.get("video_ids", [])]
     counts = {o.value: 0 for o in DownloadOutcome}
+    metrics = {f"metrics_{o.value}": 0 for o in MetricsOutcome}
     failures: list[dict[str, Any]] = []
 
     async def run(fetcher: ThumbnailFetcher) -> None:
         sessions = get_sessionmaker()
         for done, video_id in enumerate(video_ids, start=1):
             async with sessions() as db:
-                outcome, error = await download_thumbnail(db, storage, fetcher, video_id)
+                res = await ingest_thumbnail(db, storage, fetcher, video_id)
                 await db.commit()
-            counts[outcome.value] += 1
-            if error and len(failures) < MAX_REPORTED_FAILURES:
-                failures.append({"video_id": video_id, "error": error})
+            counts[res.download.value] += 1
+            metrics[f"metrics_{res.metrics.value}"] += 1
+            if res.error and len(failures) < MAX_REPORTED_FAILURES:
+                failures.append({"video_id": video_id, "error": res.error})
             await ctx.progress(done, len(video_ids))
 
     override: ThumbnailFetcher | None = ctx.resources.get("thumbnail_fetcher")
@@ -53,7 +56,7 @@ async def thumbnail_download(ctx: JobRunContext) -> dict[str, Any]:
         async with open_thumbnail_fetcher(settings) as fetcher:
             await run(fetcher)
             fetcher_name = fetcher.name
-    return {**counts, "total": len(video_ids), "fetcher": fetcher_name, "failures": failures}
+    return {**counts, **metrics, "total": len(video_ids), "fetcher": fetcher_name, "failures": failures}
 
 
 @job_task(name=JobType.DISCOVERY.value, queue=JobQueue.BULK)

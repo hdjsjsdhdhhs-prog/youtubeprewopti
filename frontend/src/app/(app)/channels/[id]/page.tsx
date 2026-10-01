@@ -14,6 +14,7 @@ import {
   useChannelVideos,
   useDownloadChannelThumbnails,
   type ChannelDetail,
+  type ImageMetrics,
   type Video,
 } from "@/lib/api/hooks";
 import { formatCount, formatDate, formatDateTime, formatDuration, formatRatio } from "@/lib/format";
@@ -222,7 +223,9 @@ function Thumbnails({ channel }: { channel: ChannelDetail }) {
   const [offset, setOffset] = useState(0);
   const videos = useChannelVideos(channel.id, offset);
   const download = useDownloadChannelThumbnails(channel.id);
-  const missing = videos.data?.items.some((v) => v.thumbnail && v.thumbnail.fetch_status !== "ok") ?? false;
+  // Downloaded thumbnails without metrics (e.g. stored before Phase 3) are processed by the same job.
+  const missing =
+    videos.data?.items.some((v) => v.thumbnail && (v.thumbnail.fetch_status !== "ok" || !v.thumbnail.metrics)) ?? false;
 
   return (
     <Card className="mt-4 p-0">
@@ -247,7 +250,7 @@ function Thumbnails({ channel }: { channel: ChannelDetail }) {
               </span>
             ) : null}
             <Button size="sm" variant="secondary" disabled={download.isPending} onClick={() => download.mutate()}>
-              <Download className="size-3.5" aria-hidden /> Скачать превью
+              <Download className="size-3.5" aria-hidden /> Скачать превью и метрики
             </Button>
           </div>
         ) : null}
@@ -311,6 +314,38 @@ function VideoCard({ video: v }: { video: Video }) {
         <span>{formatCount(v.view_count)} просм.</span>·<span>{formatDate(v.published_at)}</span>
         {t?.fetch_status === "failed" ? <Badge tone="red">ошибка</Badge> : null}
       </p>
+      {t?.metrics ? <ThumbnailMetrics m={t.metrics} /> : null}
     </li>
+  );
+}
+
+/** Deterministic metrics (no AI) — compact, with the exact meaning in the tooltip. */
+function ThumbnailMetrics({ m }: { m: ImageMetrics }) {
+  const items: [string, string, string][] = [
+    ["ярк.", formatRatio(m.luminance_mean), "Яркость 0..1"],
+    ["контр.", formatRatio(m.contrast_rms), "RMS-контраст 0..0,5"],
+    ["цвет", formatCount(Math.round(m.colorfulness)), "Насыщенность цвета (Hasler–Süsstrunk): 0 — серое, >100 — очень ярко"],
+    ["резк.", formatCount(Math.round(m.sharpness_laplacian)), "Резкость: дисперсия лапласиана"],
+    ["детали", formatRatio(m.edge_density), "Плотность контуров 0..1"],
+  ];
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-zinc-500" aria-label="Метрики превью">
+      {items.map(([k, v, hint]) => (
+        <span key={k} title={hint} className="tabular-nums">
+          {k} {v}
+        </span>
+      ))}
+      <span className="flex" title="Доминирующие цвета">
+        {m.dominant_colors.slice(0, 5).map((c) => (
+          <span
+            key={c.hex}
+            className="size-2.5 border border-white first:rounded-l-sm last:rounded-r-sm dark:border-zinc-900"
+            style={{ backgroundColor: c.hex }}
+            title={`${c.hex} · ${Math.round(c.share * 100)} %`}
+          />
+        ))}
+      </span>
+      {m.letterbox_cropped ? <span title="Чёрные полосы сверху/снизу обрезаны перед расчётом">без полос</span> : null}
+    </div>
   );
 }

@@ -53,7 +53,7 @@ channels ── videos ─┬─ video_stats_snapshots
 | Таблица | Ключевые колонки | Ограничения / индексы |
 |---|---|---|
 | `taxonomy_nodes` | parent_id, level ENUM(niche, topic, subtopic), name, slug | UNIQUE(parent_id, slug) |
-| `search_projects` | workspace_id, name, description, language, region_code, results_per_query, search_depth, published_after, videos_to_analyze, filter_settings JSONB, ideal_lead_profile_id, status | UNIQUE(workspace_id, name) |
+| `search_projects` | workspace_id, name, description, language, region_code, results_per_query, search_depth, published_after, videos_to_analyze, filter_settings JSONB, prefilter_settings JSONB (Phase 3, `ThumbnailPrefilter`; `{}` = по умолчанию), ideal_lead_profile_id, status | UNIQUE(workspace_id, name) |
 | `project_niches` | project_id, taxonomy_node_id | PK(project_id, taxonomy_node_id) |
 | `search_queries` | project_id, text, text_normalized, taxonomy_node_id NULL, search_type ENUM(video, channel) (Phase 2), status, last_run_at, results_count | UNIQUE(project_id, text_normalized) |
 | `discovery_runs` | **не создана** (Phase 2): история запусков — это `job_runs` с `type='discovery'`, `params.project_id`, итоги в `result` (фильтр `GET /api/jobs?project_id=`) | — |
@@ -77,14 +77,14 @@ channels ── videos ─┬─ video_stats_snapshots
 |---|---|---|
 | `image_assets` | sha256, phash (BIGINT), storage_key, mime, width, height, bytes, source ENUM(youtube_thumbnail, generated, reference, upload) | UNIQUE(sha256); idx(phash) |
 | `thumbnails` | video_id, image_asset_id, original_url, variant (maxres/high/medium), fetch_status, fetched_at, error | UNIQUE(video_id) |
-| `image_metrics` | image_asset_id (PK), luminance_mean, contrast_rms, colorfulness, sharpness_laplacian, edge_density, saliency_center_ratio, text_area_ratio NULL, face_count NULL, dominant_colors JSONB, algo_version | детерминированные («объективные») метрики §6 |
+| `image_metrics` (Phase 3) | image_asset_id (PK, CASCADE), algo_version, computed_at, work_width, work_height, letterbox_cropped, luminance_mean, contrast_rms, colorfulness, sharpness_laplacian, edge_density, saliency_center_ratio NULL, dominant_colors JSONB | CHECK(luminance 0..1, edge_density 0..1, saliency 0..1); idx(luminance_mean), idx(contrast_rms), idx(colorfulness). Детерминированные метрики §6 на рабочей ширине 320 px после обрезки чёрных полос; формулы — `app/domains/media/imaging.py`. Строки старой `algo_version` пересчитываются следующей загрузкой. `text_area_ratio`/`face_count` не созданы (Q-009) |
 
 ### AI & analysis (Phase 3)
 | Таблица | Ключевые колонки | Ограничения / индексы |
 |---|---|---|
-| `ai_models` | key, provider, api_model_id, capabilities TEXT[], price_input_per_1m, price_output_per_1m, price_per_image JSONB, pricing_verified_at, enabled | UNIQUE(key) |
-| `prompt_templates` | name, version, content_hash, body, output_schema JSONB, created_at | UNIQUE(name, version) |
-| `ai_calls` | workspace_id NULL, job_run_id NULL, task, provider, model_key, prompt_template_id, input_ref JSONB, output JSONB, status ENUM(ok, invalid_output, repaired, refused, error), validation_errors JSONB, input_tokens, output_tokens, image_inputs, image_outputs, estimated_cost_usd, actual_cost_usd, duration_ms, attempt | idx(task, created_at), idx(job_run_id) |
+| `ai_models` ✅ | key, provider, api_model_id, capabilities VARCHAR[], price_input_per_1m, price_output_per_1m (USD / 1M токенов, NULL = неизвестна), price_per_image JSONB, pricing_verified_at, enabled, notes | UNIQUE(key). Глобальный реестр; строки по умолчанию вставляются при первом обращении (`on conflict do nothing`) |
+| `prompt_templates` ✅ | name, version, content_hash (SHA-256 файла), body, output_schema JSONB, created_at | UNIQUE(name, version) |
+| `ai_calls` ✅ | workspace_id NULL (CASCADE), project_id NULL, job_run_id NULL, task, provider, model_key, api_model_id, prompt_template_id, attempt (2 = repair), status ENUM(pending, ok, repaired, invalid_output, refused, error), input_ref JSONB, output JSONB (только валидный), raw_output (для отладки невалидного), validation_errors JSONB, error_code, error_message, input_tokens, output_tokens, image_inputs, image_outputs, estimated_cost_usd, actual_cost_usd NUMERIC(14,6), duration_ms | idx(task, created_at), idx(workspace_id, created_at), idx(job_run_id); CHECK(attempt ≥ 1). Строка вставляется `pending` **до** вызова (резерв в бюджете) и дополняется после |
 | `scoring_profiles` | workspace_id, kind ENUM(thumbnail, lead, priority, contactability), version, weights JSONB, is_active | UNIQUE(workspace_id, kind, version) |
 | `thumbnail_analyses` | image_asset_id, prompt_template_id, model_key, ai_call_id, composition, contrast, text, hierarchy, subject, color, mobile_readability, topic_relevance, visual_impact, professionalism, redesign_potential (все NUMERIC 1–10), overall_score (детерминированный), scoring_profile_id, problems JSONB, recommendations JSONB, visual_summary TEXT, improvement_opportunity ENUM(low, medium, high), is_current | UNIQUE(image_asset_id, prompt_template_id, model_key); idx(overall_score) |
 | `channel_analyses` | channel_id, workspace_id NULL, ai_call_id, thumbnails_analyzed, avg_score, median_score, best_thumbnail_id, worst_thumbnail_id, pct_weak, pct_medium, pct_strong, visual_consistency (1–10), visual_opportunity ENUM(low, medium, high), repeated_template BOOL, outdated_style_score, patterns JSONB, recurring_problems JSONB, weakest_video_ids BIGINT[], summary, is_current | idx(channel_id, is_current) |
@@ -147,8 +147,8 @@ channels ── videos ─┬─ video_stats_snapshots
 ### Operations (Phase 1+)
 | Таблица | Ключевые колонки | Ограничения / индексы |
 |---|---|---|
-| `job_runs` | workspace_id, type, fingerprint, status, priority, queue, params JSONB, progress_total, progress_done, budget_usd, estimated_cost_usd, actual_cost_usd, procrastinate_job_id, parent_id, error_code, error_human, started_at, finished_at | partial UNIQUE(fingerprint) WHERE status IN (queued, running, retrying) |
-| `budgets` | workspace_id, scope ENUM(global, project, job_type), scope_ref, period ENUM(day, month, total), limit_usd, max_ai_operations | — |
+| `job_runs` | workspace_id, type, fingerprint, status, priority, queue, params JSONB, progress_total, progress_done, budget_usd, estimated_cost_usd, actual_cost_usd (NUMERIC(14,6) с Phase 3 — суммы долей цента не теряются), procrastinate_job_id, parent_id, error_code, error_human, started_at, finished_at | partial UNIQUE(fingerprint) WHERE status IN (queued, running, retrying) |
+| `budgets` (Phase 3) | workspace_id (CASCADE), scope ENUM(global, project, task), scope_ref (id проекта / AI-задача; NULL для global), period ENUM(day, month, total — UTC), limit_usd NULL, max_ai_operations NULL, is_active | UNIQUE(workspace_id, scope, scope_ref, period) NULLS NOT DISTINCT; CHECK(хотя бы один лимит; лимиты ≥ 0; scope_ref задан ⇔ scope ≠ global). Нет строк — нет лимита. Scope `task` вместо задуманного `job_type`: лимит относится к AI-задаче, а не к типу фоновой задачи |
 | `youtube_quota_ledger` (Phase 2) | provider (`youtube_api` \| `youtube_mock`; таблицы `integrations` пока нет), quota_day DATE (Pacific, считается PostgreSQL: `(now() AT TIME ZONE 'America/Los_Angeles')::date`), units_used, units_limit, updated_at | PK(provider, quota_day); резервирование — атомарный upsert с `WHERE units_used + n <= limit` |
 | `provider_cache` | provider, cache_key, response JSONB, expires_at | UNIQUE(provider, cache_key) — **не создана**: вместо кэша ответов discovery не перезапрашивает каналы, обновлённые < `YTL_YOUTUBE_CHANNEL_REFRESH_HOURS` назад |
 | `integration_events` | integration_id, operation, http_status, error_code, latency_ms, created_at | idx(integration_id, created_at) |

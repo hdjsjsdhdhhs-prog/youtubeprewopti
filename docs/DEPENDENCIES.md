@@ -15,11 +15,11 @@
 | psycopg[binary,pool] | 3.3.x | PG driver | sync+async, нужен Procrastinate | High | asyncpg | Async на Windows требует `WindowsSelectorEventLoopPolicy` (проверено) |
 | procrastinate | 3.10.x | Job queue | PG-based | High | Dramatiq, Celery | Требует `lc_messages='C'` на сервере (проверено); signal handling ограничен на Windows |
 | httpx | 0.28.x | HTTP client | async, тестируемость | High | aiohttp | Прокси берётся из `HTTP(S)_PROXY` |
-| openai | 3.19.x | OpenAI SDK | Официальный | High | raw httpx | Только внутри `providers/ai/openai_*` |
+| openai | 3.22.x | OpenAI SDK (Responses API) | Официальный | High | raw httpx | Только внутри `providers/ai/openai_*`. С 3.x свой HTTP-стек `httpx2` (транзитивно): respx его не видит — в тестах `http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(...))` |
 | pillow | 12.3.x | Images | Метрики, ресайз, валидация загрузок | High | pyvips | — |
 | numpy | 2.5.x | Image metrics | Векторные вычисления | Medium | — | — |
 | imagehash | 4.3.x | pHash | Дедупликация | Medium | своя реализация pHash (~40 строк) | Тянет scipy/PyWavelets — при избыточности заменить своей реализацией DCT-pHash |
-| jinja2 | 3.x | Prompt templates | Шаблоны | Medium | string.Template | — |
+| ~~jinja2~~ | — | Prompt templates | **Не добавлен** (Phase 3): для подстановки переменных хватает `string.Template` (отсутствующая переменная — ошибка) | — | jinja2, если понадобятся циклы/условия в промптах | — |
 | argon2-cffi | 25.1.x | Passwords | Argon2id | High | bcrypt | — |
 | cryptography | 50.0.x | AES-GCM | Секреты | High | PyNaCl | — |
 | structlog | 26.1.x | Logging | JSON logs | Medium | stdlib logging + json formatter | — |

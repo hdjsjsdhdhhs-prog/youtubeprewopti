@@ -2,25 +2,35 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 
-from sqlalchemy import exists, select
+from sqlalchemy import ColumnElement, and_, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import IntegrationError
+from app.core.errors import ConflictError, IntegrationError
 from app.domains.identity.service import audit
 from app.domains.jobs.service import Enqueued, JobQueue, JobType, enqueue_job
-from app.domains.media.imaging import InvalidImageError, inspect_image, phash
-from app.domains.media.models import FetchStatus, ImageAsset, ImageSource, Thumbnail
-from app.domains.projects.models import ProjectChannel, SearchProject
+from app.domains.media.imaging import (
+    METRICS_ALGO_VERSION,
+    InvalidImageError,
+    compute_image_metrics,
+    inspect_image,
+    phash,
+)
+from app.domains.media.models import FetchStatus, ImageAsset, ImageMetrics, ImageSource, Thumbnail
+from app.domains.projects.models import ProjectChannel, ProjectStatus, SearchProject
+from app.domains.projects.service import get_project
 from app.domains.youtube.models import Video
 from app.domains.youtube.service import get_visible_channel
 from app.providers.storage.base import StorageBackend, sha256_hex
 from app.providers.thumbnails.base import ThumbnailFetcher
 
 MAX_VIDEOS_PER_THUMBNAIL_JOB = 1000
+MAX_VIDEOS_PER_PROJECT_JOB = 5000
 
 
 async def store_image(
@@ -115,30 +125,82 @@ async def download_thumbnail(
     return DownloadOutcome.FAILED, error
 
 
-async def enqueue_channel_thumbnails(
-    db: AsyncSession, workspace_id: int, actor_id: int, channel_id: int
-) -> tuple[Enqueued | None, int]:
-    """Queue downloads for the channel's thumbnails that are not stored yet.
+class MetricsOutcome(StrEnum):
+    COMPUTED = "computed"
+    CURRENT = "current"  # already computed with the current algorithm version
+    FAILED = "failed"  # file missing from storage / undecodable
+    NO_IMAGE = "no_image"  # thumbnail not stored (download failed or row missing)
 
-    Returns ``(None, 0)`` when there is nothing to download.
-    """
-    await get_visible_channel(db, workspace_id, channel_id)  # 404 for other workspaces
-    video_ids = list(
-        await db.scalars(
-            select(Video.id)
-            .join(Thumbnail, Thumbnail.video_id == Video.id)
-            .where(Video.channel_id == channel_id, Thumbnail.fetch_status != FetchStatus.OK)
-            .order_by(Video.id)
-            .limit(MAX_VIDEOS_PER_THUMBNAIL_JOB)
-        )
+
+async def ensure_image_metrics(
+    db: AsyncSession, storage: StorageBackend, asset: ImageAsset, data: bytes | None = None
+) -> MetricsOutcome:
+    """Compute (or recompute after an algorithm change) the asset's deterministic metrics. Caller commits."""
+    current = await db.scalar(
+        select(ImageMetrics.algo_version).where(ImageMetrics.image_asset_id == asset.id)
     )
-    if not video_ids:
-        return None, 0
+    if current == METRICS_ALGO_VERSION:
+        return MetricsOutcome.CURRENT
+    if data is None:
+        if asset.storage_backend != storage.name or not storage.exists(asset.storage_key):
+            return MetricsOutcome.FAILED
+        data = storage.get(asset.storage_key)
+    try:
+        values = compute_image_metrics(data)
+    except InvalidImageError:
+        return MetricsOutcome.FAILED
+    row = {"algo_version": METRICS_ALGO_VERSION, "computed_at": func.now(), **values.as_row()}
+    stmt = insert(ImageMetrics).values(image_asset_id=asset.id, **row)
+    await db.execute(stmt.on_conflict_do_update(index_elements=["image_asset_id"], set_=row))
+    return MetricsOutcome.COMPUTED
+
+
+@dataclass(frozen=True)
+class IngestResult:
+    download: DownloadOutcome
+    error: str | None
+    metrics: MetricsOutcome
+
+
+async def ingest_thumbnail(
+    db: AsyncSession, storage: StorageBackend, fetcher: ThumbnailFetcher, video_id: int
+) -> IngestResult:
+    """Download the video's thumbnail if needed, then make sure its metrics are current. Caller commits."""
+    outcome, error = await download_thumbnail(db, storage, fetcher, video_id)
+    if outcome not in (DownloadOutcome.DOWNLOADED, DownloadOutcome.SKIPPED):
+        return IngestResult(outcome, error, MetricsOutcome.NO_IMAGE)
+    asset = await db.scalar(
+        select(ImageAsset).join(Thumbnail, Thumbnail.image_asset_id == ImageAsset.id)
+        .where(Thumbnail.video_id == video_id)
+    )
+    if asset is None:
+        return IngestResult(outcome, error, MetricsOutcome.NO_IMAGE)
+    return IngestResult(outcome, error, await ensure_image_metrics(db, storage, asset))
+
+
+def needs_ingestion() -> ColumnElement[bool]:
+    """Thumbnail not stored yet, or stored without metrics of the current algorithm version."""
+    current_metrics = exists(
+        select(ImageMetrics.image_asset_id).where(
+            ImageMetrics.image_asset_id == Thumbnail.image_asset_id,
+            ImageMetrics.algo_version == METRICS_ALGO_VERSION,
+        ).correlate(Thumbnail)
+    )
+    return or_(
+        Thumbnail.fetch_status != FetchStatus.OK,
+        Thumbnail.image_asset_id.is_(None),
+        ~current_metrics,
+    )
+
+
+async def _enqueue_ingestion(
+    db: AsyncSession, workspace_id: int, actor_id: int, video_ids: list[int], scope: dict[str, Any]
+) -> Enqueued:
     enq = await enqueue_job(
         db,
         type_=JobType.THUMBNAIL_DOWNLOAD,
         queue=JobQueue.BULK,
-        params={"video_ids": video_ids, "channel_id": channel_id},
+        params={"video_ids": video_ids, **scope},
         workspace_id=workspace_id,
         created_by=actor_id,
         progress_total=len(video_ids),
@@ -146,7 +208,104 @@ async def enqueue_channel_thumbnails(
     if enq.created:
         await audit(
             db, "job.enqueued", workspace_id=workspace_id, actor_user_id=actor_id, entity_type="job_run",
-            entity_id=enq.job.id,
-            diff={"type": enq.job.type, "channel_id": channel_id, "videos": len(video_ids)},
+            entity_id=enq.job.id, diff={"type": enq.job.type, **scope, "videos": len(video_ids)},
         )
+    return enq
+
+
+async def enqueue_channel_thumbnails(
+    db: AsyncSession, workspace_id: int, actor_id: int, channel_id: int
+) -> tuple[Enqueued | None, int]:
+    """Queue downloads (+ metrics) for the channel's thumbnails that are not fully ingested yet.
+
+    Returns ``(None, 0)`` when there is nothing to do.
+    """
+    await get_visible_channel(db, workspace_id, channel_id)  # 404 for other workspaces
+    video_ids = list(
+        await db.scalars(
+            select(Video.id)
+            .join(Thumbnail, Thumbnail.video_id == Video.id)
+            .where(Video.channel_id == channel_id, needs_ingestion())
+            .order_by(Video.id)
+            .limit(MAX_VIDEOS_PER_THUMBNAIL_JOB)
+        )
+    )
+    if not video_ids:
+        return None, 0
+    enq = await _enqueue_ingestion(db, workspace_id, actor_id, video_ids, {"channel_id": channel_id})
     return enq, len(video_ids)
+
+
+def _project_videos(project_id: int) -> ColumnElement[bool]:
+    return exists(
+        select(ProjectChannel.channel_id).where(
+            ProjectChannel.project_id == project_id, ProjectChannel.channel_id == Video.channel_id
+        ).correlate(Video)
+    )
+
+
+@dataclass(frozen=True)
+class ProjectIngestion:
+    enqueued: Enqueued | None
+    items: int
+    remaining: int  # still needing ingestion beyond this job's cap (start again after it finishes)
+
+
+async def enqueue_project_thumbnails(
+    db: AsyncSession, workspace_id: int, actor_id: int, project_id: int
+) -> ProjectIngestion:
+    """Bulk ingestion (§6 step 1): every not yet ingested thumbnail of the project's channels — newest
+    videos first, at most ``MAX_VIDEOS_PER_PROJECT_JOB`` per job."""
+    project = await get_project(db, workspace_id, project_id)
+    if project.status == ProjectStatus.ARCHIVED:
+        raise ConflictError("Project is archived; restore it to download thumbnails", code="project_archived")
+    base = (
+        select(Video.id)
+        .join(Thumbnail, Thumbnail.video_id == Video.id)
+        .where(_project_videos(project_id), needs_ingestion())
+    )
+    total = await db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    video_ids = list(
+        await db.scalars(
+            base.order_by(Video.published_at.desc().nulls_last(), Video.id).limit(MAX_VIDEOS_PER_PROJECT_JOB)
+        )
+    )
+    if not video_ids:
+        return ProjectIngestion(enqueued=None, items=0, remaining=0)
+    video_ids.sort()  # canonical order => identical requests share one active job (fingerprint)
+    enq = await _enqueue_ingestion(db, workspace_id, actor_id, video_ids, {"project_id": project_id})
+    return ProjectIngestion(enqueued=enq, items=len(video_ids), remaining=max(0, total - len(video_ids)))
+
+
+@dataclass(frozen=True)
+class ThumbnailStats:
+    videos: int
+    with_thumbnail: int
+    downloaded: int
+    pending: int
+    failed: int
+    with_metrics: int  # downloaded and metrics of the current algorithm version
+
+
+async def project_thumbnail_stats(db: AsyncSession, workspace_id: int, project_id: int) -> ThumbnailStats:
+    await get_project(db, workspace_id, project_id)
+    has_metrics = and_(
+        ImageMetrics.image_asset_id.is_not(None), ImageMetrics.algo_version == METRICS_ALGO_VERSION
+    )
+    row = (
+        await db.execute(
+            select(
+                func.count(Video.id),
+                func.count(Thumbnail.id),
+                func.count(Thumbnail.id).filter(Thumbnail.fetch_status == FetchStatus.OK),
+                func.count(Thumbnail.id).filter(Thumbnail.fetch_status == FetchStatus.PENDING),
+                func.count(Thumbnail.id).filter(Thumbnail.fetch_status == FetchStatus.FAILED),
+                func.count(Thumbnail.id).filter(Thumbnail.fetch_status == FetchStatus.OK, has_metrics),
+            )
+            .select_from(Video)
+            .outerjoin(Thumbnail, Thumbnail.video_id == Video.id)
+            .outerjoin(ImageMetrics, ImageMetrics.image_asset_id == Thumbnail.image_asset_id)
+            .where(_project_videos(project_id))
+        )
+    ).one()
+    return ThumbnailStats(*row)

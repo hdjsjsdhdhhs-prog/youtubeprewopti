@@ -148,8 +148,9 @@ async def update_project(
         await _ensure_name_free(db, workspace_id, changes["name"], exclude_id=project.id)
     if changes.get("description", "") is None:
         changes["description"] = ""
-    if changes.get("filter_settings", {}) is None:
-        changes["filter_settings"] = {}
+    for field in ("filter_settings", "prefilter_settings"):
+        if field in changes and changes[field] is None:
+            changes[field] = {}  # null resets to defaults
     for field in ("results_per_query", "search_depth", "videos_to_analyze"):
         if field in changes and changes[field] is None:
             changes.pop(field)  # NOT NULL columns: null means "no change"

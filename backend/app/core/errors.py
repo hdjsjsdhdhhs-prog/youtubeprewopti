@@ -58,6 +58,7 @@ class IntegrationErrorCode(StrEnum):
     INVALID_INPUT = "invalid_input"
     TIMEOUT = "timeout"
     NOT_CONFIGURED = "not_configured"
+    MODEL_UNAVAILABLE = "model_unavailable"  # unknown model ID / unsupported capability => try next model
     UNKNOWN = "unknown"
 
 

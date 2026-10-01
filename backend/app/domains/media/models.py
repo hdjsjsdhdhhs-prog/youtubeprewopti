@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import TIMESTAMP
 
@@ -56,3 +57,38 @@ class Thumbnail(IdMixin, TimestampMixin, Base):
     )
     fetched_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class ImageMetrics(Base):
+    """Deterministic ("objective") image metrics, no AI (§6, AI_ARCHITECTURE §2 step 1).
+
+    Computed once per content-addressed asset on a fixed working size, so values are comparable across
+    thumbnails of any resolution. ``algo_version`` changes => recomputed by the next ingestion run.
+    Text share / face count (Q-009) are deliberately not computed yet.
+    """
+
+    __tablename__ = "image_metrics"
+    __table_args__ = (
+        CheckConstraint("luminance_mean BETWEEN 0 AND 1", name="luminance_range"),
+        CheckConstraint("edge_density BETWEEN 0 AND 1", name="edge_density_range"),
+        CheckConstraint(
+            "saliency_center_ratio IS NULL OR saliency_center_ratio BETWEEN 0 AND 1", name="saliency_range"
+        ),
+    )
+    image_asset_id: Mapped[int] = mapped_column(
+        ForeignKey("image_assets.id", ondelete="CASCADE"), primary_key=True
+    )
+    algo_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+    work_width: Mapped[int] = mapped_column(Integer, nullable=False)
+    work_height: Mapped[int] = mapped_column(Integer, nullable=False)
+    letterbox_cropped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    luminance_mean: Mapped[float] = mapped_column(Float, nullable=False, index=True)
+    contrast_rms: Mapped[float] = mapped_column(Float, nullable=False, index=True)
+    colorfulness: Mapped[float] = mapped_column(Float, nullable=False, index=True)
+    sharpness_laplacian: Mapped[float] = mapped_column(Float, nullable=False)
+    edge_density: Mapped[float] = mapped_column(Float, nullable=False)
+    saliency_center_ratio: Mapped[float | None] = mapped_column(Float)
+    dominant_colors: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")

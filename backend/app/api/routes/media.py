@@ -8,10 +8,43 @@ from sqlalchemy import select
 from app.api.deps import DbSession, ReadAuth, Storage, WriteAuth
 from app.core.errors import NotFoundError
 from app.domains.jobs.schemas import EnqueueResult, JobRunOut
+from app.domains.media.imaging import METRICS_ALGO_VERSION
 from app.domains.media.models import ImageAsset
-from app.domains.media.service import asset_visible_to_workspace, enqueue_channel_thumbnails
+from app.domains.media.schemas import ThumbnailIngestResult, ThumbnailStatsOut
+from app.domains.media.service import (
+    asset_visible_to_workspace,
+    enqueue_channel_thumbnails,
+    enqueue_project_thumbnails,
+    project_thumbnail_stats,
+)
 
 router = APIRouter(tags=["media"])
+
+
+@router.post(
+    "/projects/{project_id}/thumbnails/download",
+    response_model=ThumbnailIngestResult,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def download_project_thumbnails(
+    project_id: int, ctx: WriteAuth, db: DbSession
+) -> ThumbnailIngestResult:
+    """Queue a ``thumbnail_download`` job for every thumbnail of the project's channels that is not
+    downloaded yet or has no metrics of the current algorithm (newest videos first, capped per job —
+    ``remaining`` tells how many are left for the next run). No YouTube API quota is used."""
+    plan = await enqueue_project_thumbnails(db, ctx.workspace.id, ctx.user.id, project_id)
+    if plan.enqueued is None:
+        return ThumbnailIngestResult(job=None, created=False, items=0, remaining=0)
+    return ThumbnailIngestResult(
+        job=JobRunOut.model_validate(plan.enqueued.job), created=plan.enqueued.created, items=plan.items,
+        remaining=plan.remaining,
+    )
+
+
+@router.get("/projects/{project_id}/thumbnails/stats", response_model=ThumbnailStatsOut)
+async def project_thumbnails_stats(project_id: int, ctx: ReadAuth, db: DbSession) -> ThumbnailStatsOut:
+    stats = await project_thumbnail_stats(db, ctx.workspace.id, project_id)
+    return ThumbnailStatsOut(**stats.__dict__, metrics_algo_version=METRICS_ALGO_VERSION)
 
 
 @router.post(

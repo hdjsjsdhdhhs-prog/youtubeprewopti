@@ -31,6 +31,13 @@ export type TaxonomyLevel = Schemas["TaxonomyLevel"];
 export type SearchType = Schemas["SearchType"];
 export type Quota = Schemas["QuotaOut"];
 export type DiscoveryStartResult = Schemas["DiscoveryStartResult"];
+export type ThumbnailStats = Schemas["ThumbnailStatsOut"];
+export type ThumbnailIngestResult = Schemas["ThumbnailIngestResult"];
+export type ImageMetrics = Schemas["ImageMetricsOut"];
+export type PrefilterPreview = Schemas["PrefilterPreview"];
+export type AnalysisEstimate = Schemas["AnalysisEstimate"];
+export type AnalysisEstimateRequest = Schemas["AnalysisEstimateRequest"];
+export type AIStatus = Schemas["AIStatusOut"];
 
 export const ACTIVE_JOB_STATUSES: ReadonlySet<JobStatus> = new Set(["queued", "running", "retrying"]);
 
@@ -51,6 +58,8 @@ export const qk = {
     ["jobs", "list", p] as const,
   taxonomy: ["taxonomy"] as const,
   quota: ["youtube", "quota"] as const,
+  thumbnailStats: (id: number) => ["projects", "detail", id, "thumbnail-stats"] as const,
+  aiStatus: ["ai", "status"] as const,
 };
 
 // --- auth -------------------------------------------------------------------------------------
@@ -318,6 +327,52 @@ export function useDownloadChannelThumbnails(id: number) {
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.jobs }),
   });
+}
+
+// --- thumbnails: ingestion, prefilter, AI estimate (Phase 3) ------------------------------------
+
+export function useThumbnailStats(projectId: number) {
+  return useQuery({
+    queryKey: qk.thumbnailStats(projectId),
+    queryFn: () =>
+      unwrap(api.GET("/api/projects/{project_id}/thumbnails/stats", { params: { path: { project_id: projectId } } })),
+  });
+}
+
+export function useIngestProjectThumbnails(projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      unwrap(api.POST("/api/projects/{project_id}/thumbnails/download", { params: { path: { project_id: projectId } } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.jobs }),
+  });
+}
+
+/** Read-only preview of the prefilter selection (POST because the unsaved settings travel in the body). */
+export function usePrefilterPreview(projectId: number) {
+  return useMutation({
+    mutationFn: (body: Schemas["ThumbnailPrefilter"]) =>
+      unwrap(
+        api.POST("/api/projects/{project_id}/prefilter/preview", { params: { path: { project_id: projectId } }, body }),
+      ),
+  });
+}
+
+/** Pre-flight cost estimate of the AI thumbnail audit (budget gate). Nothing is charged. */
+export function useAnalysisEstimate(projectId: number) {
+  return useMutation({
+    mutationFn: (body: AnalysisEstimateRequest) =>
+      unwrap(
+        api.POST("/api/projects/{project_id}/thumbnail-analysis/estimate", {
+          params: { path: { project_id: projectId } },
+          body,
+        }),
+      ),
+  });
+}
+
+export function useAIStatus() {
+  return useQuery({ queryKey: qk.aiStatus, queryFn: () => unwrap(api.GET("/api/ai/status")), staleTime: 60_000 });
 }
 
 // --- jobs -------------------------------------------------------------------------------------

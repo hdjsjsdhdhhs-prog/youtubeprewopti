@@ -140,6 +140,28 @@ class ChannelDetail(ChannelOut):
     discoveries_total: int
 
 
+class DominantColor(BaseModel):
+    hex: str
+    share: float
+
+
+class ImageMetricsOut(BaseModel):
+    """Deterministic metrics (no AI) — see ``app.domains.media.imaging`` for the exact formulas."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    algo_version: int
+    computed_at: datetime
+    letterbox_cropped: bool
+    luminance_mean: float
+    contrast_rms: float
+    colorfulness: float
+    sharpness_laplacian: float
+    edge_density: float
+    saliency_center_ratio: float | None
+    dominant_colors: list[DominantColor]
+
+
 class ThumbnailOut(BaseModel):
     fetch_status: FetchStatus
     original_url: str
@@ -147,6 +169,7 @@ class ThumbnailOut(BaseModel):
     image_url: str | None  # served by the API with access control; never a direct storage path
     width: int | None
     height: int | None
+    metrics: ImageMetricsOut | None = None
 
 
 class VideoOut(BaseModel):

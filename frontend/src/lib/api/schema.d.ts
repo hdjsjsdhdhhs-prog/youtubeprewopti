@@ -336,6 +336,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/thumbnails/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Download Project Thumbnails
+         * @description Queue a ``thumbnail_download`` job for every thumbnail of the project's channels that is not
+         *     downloaded yet or has no metrics of the current algorithm (newest videos first, capped per job —
+         *     ``remaining`` tells how many are left for the next run). No YouTube API quota is used.
+         */
+        post: operations["download_project_thumbnails_api_projects__project_id__thumbnails_download_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/thumbnails/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Project Thumbnails Stats */
+        get: operations["project_thumbnails_stats_api_projects__project_id__thumbnails_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/channels/{channel_id}/thumbnails/download": {
         parameters: {
             query?: never;
@@ -372,6 +411,147 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/prefilter/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Prefilter
+         * @description What the prefilter selects (body = unsaved settings; empty body = the project's saved ones).
+         *     Read-only: nothing is stored.
+         */
+        post: operations["preview_prefilter_api_projects__project_id__prefilter_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/thumbnail-analysis/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estimate Thumbnail Analysis
+         * @description Pre-flight cost estimate of an AI thumbnail audit (budget gate, §76): selection, model, price per
+         *     item, budget checks and the ``confirm_token`` that starting the run must echo. Nothing is charged.
+         */
+        post: operations["estimate_thumbnail_analysis_api_projects__project_id__thumbnail_analysis_estimate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ai Status
+         * @description Active AI provider and the model registry (API IDs, capabilities, prices, verification date).
+         */
+        get: operations["ai_status_api_ai_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/models/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Ai Model
+         * @description Set the provider's API model ID, prices (USD per 1M tokens) or enable/disable a model.
+         */
+        patch: operations["update_ai_model_api_ai_models__key__patch"];
+        trace?: never;
+    };
+    "/api/ai/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ai Usage
+         * @description Workspace AI spend (UTC day / month / total) and budgets with their current usage.
+         */
+        get: operations["ai_usage_api_ai_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/budgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Budgets
+         * @description Spending limits; an empty list means no limit (bulk runs still require confirmation).
+         */
+        get: operations["list_budgets_api_budgets_get"];
+        put?: never;
+        /** Create Budget */
+        post: operations["create_budget_api_budgets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/budgets/{budget_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Budget */
+        delete: operations["delete_budget_api_budgets__budget_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Budget */
+        patch: operations["update_budget_api_budgets__budget_id__patch"];
         trace?: never;
     };
     "/api/jobs": {
@@ -432,6 +612,188 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AIModelOut */
+        AIModelOut: {
+            /** Key */
+            key: string;
+            /** Provider */
+            provider: string;
+            /** Api Model Id */
+            api_model_id: string;
+            /** Capabilities */
+            capabilities: string[];
+            /** Price Input Per 1M */
+            price_input_per_1m: string | null;
+            /** Price Output Per 1M */
+            price_output_per_1m: string | null;
+            /** Pricing Verified At */
+            pricing_verified_at: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Notes */
+            notes: string;
+        };
+        /**
+         * AIModelUpdate
+         * @description Prices are USD per 1M tokens as published by the provider. Setting both prices marks them verified
+         *     (by you) with the current time; send ``null`` to clear a price (estimates become unavailable).
+         */
+        AIModelUpdate: {
+            /** Api Model Id */
+            api_model_id?: string | null;
+            /** Price Input Per 1M */
+            price_input_per_1m?: number | string | null;
+            /** Price Output Per 1M */
+            price_output_per_1m?: number | string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** AIStatusOut */
+        AIStatusOut: {
+            /** Provider */
+            provider: string | null;
+            /** Configured */
+            configured: boolean;
+            /** Models */
+            models: components["schemas"]["AIModelOut"][];
+        };
+        /** AIUsageOut */
+        AIUsageOut: {
+            /** Spend */
+            spend: components["schemas"]["SpendOut"][];
+            /** Budgets */
+            budgets: components["schemas"]["BudgetOut"][];
+        };
+        /** AnalysisEstimate */
+        AnalysisEstimate: {
+            /** Task */
+            task: string;
+            preview: components["schemas"]["PrefilterPreview"];
+            /** Provider */
+            provider: string | null;
+            /** Model Key */
+            model_key: string | null;
+            /** Api Model Id */
+            api_model_id: string | null;
+            /** Detail */
+            detail: string;
+            /** Items */
+            items: number;
+            /** Cost Per Item Usd */
+            cost_per_item_usd: string | null;
+            /** Estimated Cost Usd */
+            estimated_cost_usd: string | null;
+            /** Pricing Verified */
+            pricing_verified: boolean;
+            /** Estimated Input Tokens */
+            estimated_input_tokens: number;
+            /** Estimated Output Tokens */
+            estimated_output_tokens: number;
+            /** Budgets */
+            budgets: components["schemas"]["BudgetCheckOut"][];
+            /** Within Budgets */
+            within_budgets: boolean;
+            /** Confirm Token */
+            confirm_token: string;
+        };
+        /**
+         * AnalysisEstimateRequest
+         * @description Estimate for an AI thumbnail audit of the project. ``prefilter`` overrides the saved settings
+         *     (preview before saving); omitted = the project's ``prefilter_settings``.
+         */
+        AnalysisEstimateRequest: {
+            prefilter?: components["schemas"]["ThumbnailPrefilter"] | null;
+            /**
+             * Detail
+             * @default low
+             * @enum {string}
+             */
+            detail: "low" | "high";
+        };
+        /** BudgetCheckOut */
+        BudgetCheckOut: {
+            /** Budget Id */
+            budget_id: number;
+            /** Description */
+            description: string;
+            /** Limit Usd */
+            limit_usd: string | null;
+            /** Max Ai Operations */
+            max_ai_operations: number | null;
+            /** Spent Usd */
+            spent_usd: string;
+            /** Operations */
+            operations: number;
+            /** Would Exceed */
+            would_exceed: boolean;
+            /** Reason */
+            reason: string | null;
+        };
+        /** BudgetIn */
+        BudgetIn: {
+            scope: components["schemas"]["BudgetScope"];
+            /** Scope Ref */
+            scope_ref?: string | null;
+            period: components["schemas"]["BudgetPeriod"];
+            /** Limit Usd */
+            limit_usd?: number | string | null;
+            /** Max Ai Operations */
+            max_ai_operations?: number | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+        };
+        /** BudgetOut */
+        BudgetOut: {
+            /** Id */
+            id: number;
+            scope: components["schemas"]["BudgetScope"];
+            /** Scope Ref */
+            scope_ref: string | null;
+            period: components["schemas"]["BudgetPeriod"];
+            /** Limit Usd */
+            limit_usd: string | null;
+            /** Max Ai Operations */
+            max_ai_operations: number | null;
+            /** Is Active */
+            is_active: boolean;
+            /** Spent Usd */
+            spent_usd: string;
+            /** Operations */
+            operations: number;
+            /** Remaining Usd */
+            remaining_usd: string | null;
+            /** Remaining Operations */
+            remaining_operations: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * BudgetPeriod
+         * @enum {string}
+         */
+        BudgetPeriod: "day" | "month" | "total";
+        /**
+         * BudgetScope
+         * @enum {string}
+         */
+        BudgetScope: "global" | "project" | "task";
+        /** BudgetUpdate */
+        BudgetUpdate: {
+            /** Limit Usd */
+            limit_usd?: number | string | null;
+            /** Max Ai Operations */
+            max_ai_operations?: number | null;
+            /** Is Active */
+            is_active?: boolean | null;
+        };
         /** ChannelDetail */
         ChannelDetail: {
             /** Id */
@@ -661,6 +1023,13 @@ export interface components {
             quota_max_units: number;
             quota: components["schemas"]["QuotaOut"];
         };
+        /** DominantColor */
+        DominantColor: {
+            /** Hex */
+            hex: string;
+            /** Share */
+            share: number;
+        };
         /** EnqueueResult */
         EnqueueResult: {
             job: components["schemas"]["JobRunOut"] | null;
@@ -678,6 +1047,35 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * ImageMetricsOut
+         * @description Deterministic metrics (no AI) — see ``app.domains.media.imaging`` for the exact formulas.
+         */
+        ImageMetricsOut: {
+            /** Algo Version */
+            algo_version: number;
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+            /** Letterbox Cropped */
+            letterbox_cropped: boolean;
+            /** Luminance Mean */
+            luminance_mean: number;
+            /** Contrast Rms */
+            contrast_rms: number;
+            /** Colorfulness */
+            colorfulness: number;
+            /** Sharpness Laplacian */
+            sharpness_laplacian: number;
+            /** Edge Density */
+            edge_density: number;
+            /** Saliency Center Ratio */
+            saliency_center_ratio: number | null;
+            /** Dominant Colors */
+            dominant_colors: components["schemas"]["DominantColor"][];
         };
         /** JobRunDetail */
         JobRunDetail: {
@@ -791,6 +1189,25 @@ export interface components {
             workspace: components["schemas"]["WorkspaceOut"];
             role: components["schemas"]["WorkspaceRole"];
         };
+        /**
+         * MetricBounds
+         * @description Ranges over ``image_metrics`` (see ``app.domains.media.imaging`` for scales).
+         */
+        MetricBounds: {
+            luminance_mean?: components["schemas"]["MetricRange"] | null;
+            contrast_rms?: components["schemas"]["MetricRange"] | null;
+            colorfulness?: components["schemas"]["MetricRange"] | null;
+            sharpness_laplacian?: components["schemas"]["MetricRange"] | null;
+            edge_density?: components["schemas"]["MetricRange"] | null;
+            saliency_center_ratio?: components["schemas"]["MetricRange"] | null;
+        };
+        /** MetricRange */
+        MetricRange: {
+            /** Min */
+            min?: number | null;
+            /** Max */
+            max?: number | null;
+        };
         /** NicheRef */
         NicheRef: {
             /** Id */
@@ -855,6 +1272,23 @@ export interface components {
             /** Offset */
             offset: number;
         };
+        /** PrefilterPreview */
+        PrefilterPreview: {
+            /** Channels In Project */
+            channels_in_project: number;
+            /** Channels Matched */
+            channels_matched: number;
+            /** Videos Considered */
+            videos_considered: number;
+            /** Thumbnails Not Ready */
+            thumbnails_not_ready: number;
+            /** Excluded By Metrics */
+            excluded_by_metrics: number;
+            /** Thumbnails Selected */
+            thumbnails_selected: number;
+            /** Sample Video Ids */
+            sample_video_ids: number[];
+        };
         /** ProjectCreate */
         ProjectCreate: {
             /** Description */
@@ -872,6 +1306,7 @@ export interface components {
             /** Videos To Analyze */
             videos_to_analyze?: number | null;
             filter_settings?: components["schemas"]["ChannelFilterSet"] | null;
+            prefilter_settings?: components["schemas"]["ThumbnailPrefilter"] | null;
             /** Name */
             name: string;
         };
@@ -902,6 +1337,10 @@ export interface components {
             videos_to_analyze: number;
             /** Filter Settings */
             filter_settings: {
+                [key: string]: unknown;
+            };
+            /** Prefilter Settings */
+            prefilter_settings: {
                 [key: string]: unknown;
             };
             status: components["schemas"]["ProjectStatus"];
@@ -957,6 +1396,7 @@ export interface components {
             /** Videos To Analyze */
             videos_to_analyze?: number | null;
             filter_settings?: components["schemas"]["ChannelFilterSet"] | null;
+            prefilter_settings?: components["schemas"]["ThumbnailPrefilter"] | null;
             /** Name */
             name?: string | null;
             status?: components["schemas"]["ProjectStatus"] | null;
@@ -1057,6 +1497,16 @@ export interface components {
          * @enum {string}
          */
         SortOrder: "asc" | "desc";
+        /** SpendOut */
+        SpendOut: {
+            period: components["schemas"]["BudgetPeriod"];
+            /** Spent Usd */
+            spent_usd: string;
+            /** Operations */
+            operations: number;
+            /** Unpriced Operations */
+            unpriced_operations: number;
+        };
         /**
          * TaxonomyBulkImport
          * @description One name per line under ``parent_id`` (omitted = top-level niches).
@@ -1095,6 +1545,16 @@ export interface components {
             /** Slug */
             slug: string;
         };
+        /** ThumbnailIngestResult */
+        ThumbnailIngestResult: {
+            job: components["schemas"]["JobRunOut"] | null;
+            /** Created */
+            created: boolean;
+            /** Items */
+            items: number;
+            /** Remaining */
+            remaining: number;
+        };
         /** ThumbnailOut */
         ThumbnailOut: {
             fetch_status: components["schemas"]["FetchStatus"];
@@ -1108,6 +1568,55 @@ export interface components {
             width: number | null;
             /** Height */
             height: number | null;
+            metrics?: components["schemas"]["ImageMetricsOut"] | null;
+        };
+        /**
+         * ThumbnailPrefilter
+         * @description Which thumbnails of a project go to the (paid) AI audit (AI_PIPELINE: prefilter step).
+         *
+         *     Stored as ``search_projects.prefilter_settings``; ``{}`` = these defaults. Selection: channels of the
+         *     project (optionally narrowed by the project's saved channel filters) → their newest
+         *     ``videos_per_channel`` videos after the video conditions → thumbnails with current metrics inside
+         *     the metric ranges.
+         */
+        ThumbnailPrefilter: {
+            /**
+             * Apply Channel Filters
+             * @default true
+             */
+            apply_channel_filters: boolean;
+            /**
+             * Videos Per Channel
+             * @default 6
+             */
+            videos_per_channel: number;
+            /**
+             * Exclude Shorts
+             * @default true
+             */
+            exclude_shorts: boolean;
+            /** Max Video Age Days */
+            max_video_age_days?: number | null;
+            /** Min Video Views */
+            min_video_views?: number | null;
+            metrics?: components["schemas"]["MetricBounds"];
+        };
+        /** ThumbnailStatsOut */
+        ThumbnailStatsOut: {
+            /** Videos */
+            videos: number;
+            /** With Thumbnail */
+            with_thumbnail: number;
+            /** Downloaded */
+            downloaded: number;
+            /** Pending */
+            pending: number;
+            /** Failed */
+            failed: number;
+            /** With Metrics */
+            with_metrics: number;
+            /** Metrics Algo Version */
+            metrics_algo_version: number;
         };
         /** UserOut */
         UserOut: {
@@ -1924,6 +2433,68 @@ export interface operations {
             };
         };
     };
+    download_project_thumbnails_api_projects__project_id__thumbnails_download_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThumbnailIngestResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    project_thumbnails_stats_api_projects__project_id__thumbnails_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThumbnailStatsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_channel_thumbnails_api_channels__channel_id__thumbnails_download_post: {
         parameters: {
             query?: never;
@@ -1974,6 +2545,268 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                     "image/*": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_prefilter_api_projects__project_id__prefilter_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ThumbnailPrefilter"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrefilterPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    estimate_thumbnail_analysis_api_projects__project_id__thumbnail_analysis_estimate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalysisEstimateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisEstimate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_status_api_ai_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIStatusOut"];
+                };
+            };
+        };
+    };
+    update_ai_model_api_ai_models__key__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIModelUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIModelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_usage_api_ai_usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIUsageOut"];
+                };
+            };
+        };
+    };
+    list_budgets_api_budgets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetOut"][];
+                };
+            };
+        };
+    };
+    create_budget_api_budgets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_budget_api_budgets__budget_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_budget_api_budgets__budget_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetOut"];
                 };
             };
             /** @description Validation Error */

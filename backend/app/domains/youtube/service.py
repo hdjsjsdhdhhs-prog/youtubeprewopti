@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
 from app.core.errors import NotFoundError
-from app.domains.media.models import ImageAsset, Thumbnail
+from app.domains.media.models import ImageAsset, ImageMetrics, Thumbnail
 from app.domains.projects.models import (
     ChannelDiscovery,
     ProjectChannel,
@@ -31,6 +31,7 @@ from app.domains.youtube.schemas import (
     ChannelOut,
     ChannelSort,
     DiscoveryOut,
+    ImageMetricsOut,
     NicheRef,
     ProjectRef,
     SortOrder,
@@ -111,6 +112,13 @@ async def _filter_conditions(
     if f.exclude_niche:
         where.append(~_in_niches(workspace_id, project_id, await subtree_ids(db, f.exclude_niche)))
     return where
+
+
+async def channel_filter_conditions(
+    db: AsyncSession, workspace_id: int, project_id: int | None, f: ChannelFilterSet
+) -> list[ColumnElement[bool]]:
+    """§3 filters as SQL conditions over ``Channel`` (outer-joined with ``ChannelMetrics``)."""
+    return await _filter_conditions(db, workspace_id, project_id, f)
 
 
 def _channel_out(channel: Channel, metrics: ChannelMetrics | None) -> ChannelOut:
@@ -255,7 +263,9 @@ def image_url(asset_id: int) -> str:
     return f"/api/images/{asset_id}"
 
 
-def _thumb(thumb: Thumbnail | None, asset: ImageAsset | None) -> ThumbnailOut | None:
+def _thumb(
+    thumb: Thumbnail | None, asset: ImageAsset | None, metrics: ImageMetrics | None
+) -> ThumbnailOut | None:
     if thumb is None:
         return None
     return ThumbnailOut(
@@ -265,14 +275,16 @@ def _thumb(thumb: Thumbnail | None, asset: ImageAsset | None) -> ThumbnailOut | 
         image_url=image_url(asset.id) if asset else None,
         width=asset.width if asset else None,
         height=asset.height if asset else None,
+        metrics=ImageMetricsOut.model_validate(metrics) if metrics is not None else None,
     )
 
 
 def _video_select():
     return (
-        select(Video, Thumbnail, ImageAsset)
+        select(Video, Thumbnail, ImageAsset, ImageMetrics)
         .outerjoin(Thumbnail, Thumbnail.video_id == Video.id)
         .outerjoin(ImageAsset, and_(ImageAsset.id == Thumbnail.image_asset_id))
+        .outerjoin(ImageMetrics, ImageMetrics.image_asset_id == ImageAsset.id)
     )
 
 
@@ -291,9 +303,9 @@ async def list_channel_videos(
         .offset(offset)
     )
     items = []
-    for video, thumb, asset in rows:
+    for video, thumb, asset, metrics in rows:
         out = VideoOut.model_validate(video)
-        out.thumbnail = _thumb(thumb, asset)
+        out.thumbnail = _thumb(thumb, asset, metrics)
         items.append(out)
     return items, total
 
@@ -302,8 +314,8 @@ async def get_video_detail(db: AsyncSession, workspace_id: int, video_id: int) -
     row = (await db.execute(_video_select().where(Video.id == video_id))).first()
     if row is None:
         raise NotFoundError("Video not found")
-    video, thumb, asset = row
+    video, thumb, asset, metrics = row
     await get_visible_channel(db, workspace_id, video.channel_id)  # 404 if not visible
     out = VideoDetail.model_validate(video)
-    out.thumbnail = _thumb(thumb, asset)
+    out.thumbnail = _thumb(thumb, asset, metrics)
     return out

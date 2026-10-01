@@ -83,6 +83,8 @@ class SearchProject(IdMixin, TimestampMixin, Base):
     published_after: Mapped[date | None] = mapped_column(Date)
     videos_to_analyze: Mapped[int] = mapped_column(Integer, nullable=False, default=12, server_default="12")
     filter_settings: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    # which thumbnails go to AI analysis (Phase 3, ``ThumbnailPrefilter``); {} = defaults
+    prefilter_settings: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
     status: Mapped[ProjectStatus] = mapped_column(
         pg_enum(ProjectStatus, "project_status"), nullable=False, default=ProjectStatus.ACTIVE,
         server_default=ProjectStatus.ACTIVE.value,

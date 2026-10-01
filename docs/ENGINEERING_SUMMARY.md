@@ -111,6 +111,54 @@ fastapi, pydantic, sqlalchemy, alembic, psycopg, procrastinate, httpx, openai, p
 - Не сделано в Phase 2 (осознанно): поиск через «связанные видео» (`relatedToVideoId` удалён из API), кэш ответов `provider_cache`, таблица `discovery_runs` (история — `job_runs`), дата первого видео канала (требует обхода всего плейлиста), автоматическая загрузка превью найденных каналов (кнопка на карточке канала; массово — Phase 3 ingestion), AI-классификация ниш (Phase 3).
 - Следующее: Phase 3 — thumbnail ingestion + vision-анализ (нужен `YTL_OPENAI_API_KEY`, Q-004).
 
+**PHASE 3.1–3.4 — INGESTION, METRICS, AI FRAMEWORK, BUDGET GATE (2026-10-02):**
+Решения владельца: начать с 3.1–3.4; без OCR/детекции лиц (Q-009); бюджет по умолчанию без лимита, массовый запуск —
+только после подтверждения оценки.
+- **3.1 Ingestion:** `POST /api/projects/{id}/thumbnails/download` — одна задача `thumbnail_download` на все превью
+  каналов проекта, которым нужна загрузка или метрики (новые видео первыми, ≤ 5000 за задачу, `remaining`),
+  `GET …/thumbnails/stats`. Задача теперь «скачать, если нужно → посчитать метрики, если нет текущей версии»;
+  то же для кнопки на карточке канала. Квота YouTube не тратится.
+- **3.2 Метрики и prefilter:** `image_metrics` (`app/domains/media/imaging.py`, `METRICS_ALGO_VERSION=1`): яркость,
+  RMS-контраст, colorfulness (Hasler–Süsstrunk), резкость (дисперсия лапласиана), плотность контуров (Sobel +
+  non-maximum suppression — тест показал, что без утончения размытая картинка давала *больше* «краёв»), доля
+  градиентной энергии в центре, 5 доминирующих цветов; рабочая ширина 320 px; чёрные полосы 4:3 `hqdefault` обрезаются.
+  `search_projects.prefilter_settings` (`ThumbnailPrefilter`): фильтры каналов проекта → N новейших видео (без Shorts,
+  возраст, просмотры) → диапазоны метрик; `POST …/prefilter/preview`. Одинаковые изображения считаются один раз.
+- **3.3 AI-слой (ADR-0007, notes):** `app/providers/ai/` — протокол `AIProvider`, `MockAIProvider` (валидный
+  детерминированный JSON для любой JSON Schema), `OpenAIResponsesProvider` (SDK `openai` 3.22.1, Responses API,
+  JSON-schema format, data-URL изображения, классификация ошибок вкл. регион/квоту/«модель недоступна»).
+  `app/domains/ai/`: реестр `ai_models` (умолчания: vision-standard=`gpt-6-sol`, vision-premium/text-premium=`gpt-6-astra`,
+  text-bulk=`gpt-6-luna`, mock-vision/mock-text; цены OpenAI пустые), маршруты задач с fallback, промпты
+  `app/prompts/{name}/v{N}.md` + `prompt_templates` (SHA-256, изменённая версия отклоняется), `AIRunner` (резерв →
+  вызов → Pydantic → 1 repair → запись; refused/invalid_output не становятся результатом), `ai_calls`.
+  CLI `python -m app.cli ai-models` — сверка реестра с `GET /v1/models`. API: `GET /api/ai/status`,
+  `PATCH /api/ai/models/{key}` (admin), `GET /api/ai/usage`.
+- **3.4 Budget gate:** `budgets` (global/project/task × day/month/total, USD и/или число операций; нет строк — нет
+  лимита), CRUD `/api/budgets` (admin). Расход = Σ coalesce(actual, estimated) по `ai_calls`; проверка всех лимитов и
+  `job_runs.budget_usd` перед **каждым** вызовом под advisory-lock; USD-лимит при неизвестной цене блокирует
+  (`pricing_unknown`). `POST …/thumbnail-analysis/estimate` — отбор, модель, цена за превью, итог, проверки бюджетов,
+  `confirm_token` (меняется при любом изменении отбора/модели/цены/detail). `job_runs` cost-колонки → NUMERIC(14,6).
+- **Frontend:** на странице проекта — «Превью и объективные метрики» (счётчики, запуск, последние задачи,
+  автообновление) и «Отбор превью для AI-анализа» (форма prefilter, сохранение, оценка стоимости и бюджетов; кнопка
+  запуска неактивна до 3.5); на карточке канала — метрики и палитра под каждым превью, кнопка «Скачать превью и метрики»
+  появляется и для превью без метрик.
+- Миграция `4c8e1a7d2f90` применена к `ytlead` (тесты пересоздают схему `ytlead_test`); `alembic check` — без
+  расхождений в обеих; права `ytlead_app` на новые таблицы проверены (DML да, DDL нет).
+- Проверки: backend `pytest` **221 passed / 1 skipped** (+52: метрики, провайдеры на уровне HTTP, runner с
+  repair/fallback/refusal/бюджетами/кэпом задачи/версиями промптов, API ingestion/prefilter/estimate/budgets/реестра,
+  CLI, воркер считает метрики), `ruff check .`, `mypy app`; frontend lint (0 ошибок), typecheck, vitest 32,
+  `next build`; `docker compose config`. Сквозная проверка реальными процессами (uvicorn + воркер + CLI, тестовая БД,
+  mock): demo-seed → ingestion досчитал метрики 72 превью (скачивание пропущено) → preview/estimate → бюджет
+  «1 операция» даёт «превысит». UI в headless Chromium (`next dev` → API → воркер; Playwright вне репозитория): вход,
+  обе новые карточки и бейдж mock, запуск загрузки из UI и автообновление по завершении, оценка, клиентская
+  валидация, сохранение отбора и восстановление после перезагрузки, метрики под превью на карточке канала, без ошибок
+  в консоли.
+- **Не проверено:** реальные вызовы OpenAI (нет ключа; API отвечает этой машине `403 unsupported_country_region_territory`
+  — Q-016), ID/цены GPT-6 (Q-004), CI на GitHub для этих изменений (не запускался — изменения не закоммичены).
+- **Следующее — 3.5:** схема `ThumbnailAudit` + промпт `thumbnail_analysis/v1`, `scoring_profiles`/`overall_score`
+  кодом, `thumbnail_analyses` + кэш SHA-256/pHash, задача анализа с `confirm_token`, UI результатов. Нужен рабочий
+  AI-провайдер (Q-016) — до этого на mock.
+
 **VERIFICATION STATUS (этап архитектуры):**
 - Verified: версии пакетов (PyPI/npm), Procrastinate на Windows + PG16 (spike), квоты YouTube (официальная документация), модели gpt-image-2.5-flare/sunburst и линейка GPT-6 (документация OpenAI).
 - Unverified: API ID/цены GPT-6 (нет ключа), Docker-сборка (нет Docker Engine). (TypeScript: зафиксирован 5.9 — Q-011.)

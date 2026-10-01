@@ -15,7 +15,7 @@ from app.core.db import get_sessionmaker
 from app.core.errors import IntegrationError, IntegrationErrorCode
 from app.domains.identity.service import create_owner
 from app.domains.jobs.models import JobRun
-from app.domains.media.models import FetchStatus, ImageAsset, ImageSource, Thumbnail
+from app.domains.media.models import FetchStatus, ImageAsset, ImageMetrics, ImageSource, Thumbnail
 from app.domains.media.service import enqueue_channel_thumbnails
 from app.providers.thumbnails import MockThumbnailFetcher
 from app.workers.queue import queue_app
@@ -103,6 +103,9 @@ async def test_worker_downloads_thumbnails(committed, storage):
     assert all(t.fetch_status == FetchStatus.OK and t.image_asset_id for t in thumbs.values())
     assert len(assets) == 3 and {a.source for a in assets} == {ImageSource.DEMO}  # mock => labelled demo
     assert all(storage.exists(a.storage_key) for a in assets)
+    assert run.result["metrics_computed"] == 3  # deterministic metrics in the same job (Phase 3)
+    async with get_sessionmaker()() as db:
+        assert set(await db.scalars(select(ImageMetrics.image_asset_id))) == {a.id for a in assets}
 
     # re-running the same work is a no-op: nothing pending => no new job
     async with get_sessionmaker()() as db:

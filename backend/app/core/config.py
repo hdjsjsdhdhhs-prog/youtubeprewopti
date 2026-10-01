@@ -50,8 +50,14 @@ class Settings(BaseSettings):
     # External providers (optional; absence => "not_configured")
     youtube_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
-    openai_vision_model: str | None = None
+    openai_vision_model: str | None = None  # API ID for the registry key "vision-standard" (Q-004)
     openai_image_model: str | None = None
+    openai_timeout_seconds: float = 90.0
+    openai_max_retries: int = 3  # SDK-level retries of 429/5xx/timeouts (honours retry-after)
+
+    # AI provider (ADR-0007): "openai" (needs openai_api_key) or "mock" (deterministic, offline).
+    # Unset => "mock" in demo mode, "openai" when a key is configured, otherwise not configured.
+    ai_provider: Literal["openai", "mock"] | None = None
 
     # Thumbnails: "http" downloads from i.ytimg.com (no API quota), "mock" generates demo images.
     # Unset => "mock" in demo mode, "http" otherwise.
@@ -79,7 +85,8 @@ class Settings(BaseSettings):
     log_json: bool = True
 
     @field_validator(
-        "youtube_api_key", "openai_api_key", "thumbnail_fetcher", "youtube_provider", mode="before"
+        "youtube_api_key", "openai_api_key", "thumbnail_fetcher", "youtube_provider", "ai_provider",
+        "openai_vision_model", mode="before",
     )
     @classmethod
     def _empty_to_none(cls, v: object) -> object:
@@ -102,6 +109,14 @@ class Settings(BaseSettings):
         if self.demo_mode:
             return "mock"
         return "api" if self.youtube_api_key is not None else None
+
+    @property
+    def effective_ai_provider(self) -> Literal["openai", "mock"] | None:
+        if self.ai_provider is not None:
+            return self.ai_provider
+        if self.demo_mode:
+            return "mock"
+        return "openai" if self.openai_api_key is not None else None
 
 
 def _env_file() -> str | None:

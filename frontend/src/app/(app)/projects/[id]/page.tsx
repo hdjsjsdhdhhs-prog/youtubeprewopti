@@ -36,6 +36,8 @@ import { countQueryLines } from "@/lib/forms";
 import { LEVEL_LABELS, taxonomyOptions, taxonomyPath } from "@/lib/taxonomy";
 import { cn } from "@/lib/utils";
 
+import { AnalysisPrefilter, ThumbnailIngestion } from "./thumbnail-analysis";
+
 export default function ProjectDetailPage() {
   const { id: rawId } = useParams<{ id: string }>();
   const id = Number(rawId);
@@ -72,6 +74,10 @@ function ProjectDetail({ id }: { id: number }) {
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <Discovery project={p} />
         <ProjectNiches projectId={id} disabled={p.status === "archived"} />
+      </div>
+      <div className="mt-4 space-y-4">
+        <ThumbnailIngestion project={p} />
+        <AnalysisPrefilter project={p} />
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <QueriesList projectId={id} />

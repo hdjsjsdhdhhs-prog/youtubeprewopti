@@ -44,10 +44,11 @@ class JobRun(IdMixin, TimestampMixin, Base):
     progress_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     progress_done: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    budget_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
-    estimated_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    # 6 decimals: a single AI call costs fractions of a cent and the sum must not lose them
+    budget_usd: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
+    estimated_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
     actual_cost_usd: Mapped[Decimal] = mapped_column(
-        Numeric(12, 4), nullable=False, default=Decimal(0), server_default="0"
+        Numeric(14, 6), nullable=False, default=Decimal(0), server_default="0"
     )
     procrastinate_job_id: Mapped[int | None] = mapped_column(BigInteger)
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("job_runs.id", ondelete="SET NULL"))

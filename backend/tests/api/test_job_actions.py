@@ -4,13 +4,14 @@ from sqlalchemy import text
 
 from app.domains.identity.models import WorkspaceRole
 from app.domains.media.models import ImageSource
-from app.domains.media.service import store_image
+from app.domains.media.service import ensure_image_metrics, store_image
 
 
 async def _seed(db, owner, other_owner, storage):
     p = await f.project(db, owner[1].id)
     ch = await f.channel(db, projects=[p])
     asset = await store_image(db, storage, f.png_bytes(), ImageSource.YOUTUBE_THUMBNAIL)
+    await ensure_image_metrics(db, storage, asset)  # fully ingested => not queued again
     stored = await f.video(db, ch, asset=asset)
     pending = [await f.video(db, ch), await f.video(db, ch)]
     hidden = await f.channel(db, projects=[await f.project(db, other_owner[1].id)])

@@ -5,6 +5,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
+from app.domains.analysis.schemas import ThumbnailPrefilter
 from app.domains.projects.models import ProjectStatus, QueryStatus, SearchType, TaxonomyLevel
 from app.domains.youtube.schemas import ChannelFilterSet
 
@@ -26,6 +27,7 @@ class _ProjectFields(BaseModel):
     published_after: date | None = None
     videos_to_analyze: int | None = Field(default=None, ge=1, le=50)
     filter_settings: ChannelFilterSet | None = None  # saved channel filters of the project (§3, §48)
+    prefilter_settings: ThumbnailPrefilter | None = None  # which thumbnails go to AI analysis
 
 
 class ProjectCreate(_ProjectFields):
@@ -50,6 +52,7 @@ class ProjectOut(BaseModel):
     published_after: date | None
     videos_to_analyze: int
     filter_settings: dict[str, Any]
+    prefilter_settings: dict[str, Any]
     status: ProjectStatus
     is_demo: bool
     created_at: datetime
