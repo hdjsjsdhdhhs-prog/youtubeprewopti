@@ -7,6 +7,8 @@ The adapter is verified against the SDK's request/response format only — not a
 
 from __future__ import annotations
 
+import base64
+import io
 import json
 from collections.abc import Callable
 from enum import StrEnum
@@ -14,10 +16,11 @@ from enum import StrEnum
 import httpx2
 import pytest
 from openai import AsyncOpenAI
-from pydantic import BaseModel, Field
+from PIL import Image
+from pydantic import BaseModel, Field, SecretStr
 
 from app.core.errors import IntegrationError, IntegrationErrorCode
-from app.providers.ai import ImageInput, MockAIProvider, StructuredRequest
+from app.providers.ai import ImageGenRequest, ImageInput, MockAIProvider, StructuredRequest, open_ai_provider
 from app.providers.ai.openai_responses import OpenAIResponsesProvider
 
 BASE = "https://openai.invalid/v1"
@@ -106,7 +109,7 @@ async def make_provider():
     clients: list[AsyncOpenAI] = []
     seen: list[httpx2.Request] = []
 
-    def make(*responses: httpx2.Response | Exception) -> OpenAIResponsesProvider:
+    def make(*responses: httpx2.Response | Exception, **kwargs) -> OpenAIResponsesProvider:
         queue = list(responses)
 
         def handler(request: httpx2.Request) -> httpx2.Response:
@@ -123,7 +126,7 @@ async def make_provider():
             http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler)),
         )
         clients.append(client)
-        return OpenAIResponsesProvider(client)
+        return OpenAIResponsesProvider(client, **kwargs)
 
     make.seen = seen  # type: ignore[attr-defined]
     yield make
@@ -248,6 +251,131 @@ async def test_openai_network_errors_are_retryable(make_provider):
         with pytest.raises(IntegrationError) as exc:
             await provider.generate_structured(_request())
         assert exc.value.code == expected and exc.value.retryable
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 16
+JPEG = b"\xff\xd8\xff\xe0" + b"\0" * 16
+
+
+def _images_response(*payloads: bytes) -> httpx2.Response:
+    data = [{"b64_json": base64.b64encode(p).decode()} for p in payloads]
+    return httpx2.Response(200, json={"created": 1_789_534_663, "data": data})
+
+
+async def test_vibecode_errors_name_the_gateway_and_its_key(make_provider):
+    provider = make_provider(
+        _error(401, None, "invalid API key"), _error(402, None, "balance"), name="vibecode"
+    )
+    with pytest.raises(IntegrationError) as exc:
+        await provider.generate_structured(_request())
+    assert (exc.value.code, exc.value.provider) == (IntegrationErrorCode.AUTH_EXPIRED, "vibecode")
+    assert "YTL_VIBECODE_API_KEY" in exc.value.human_message
+    with pytest.raises(IntegrationError) as exc:
+        await provider.generate_structured(_request())
+    assert (exc.value.code, exc.value.retryable) == (IntegrationErrorCode.QUOTA_EXCEEDED, False)
+
+
+async def test_image_generation_requests_inline_bytes(make_provider):
+    provider = make_provider(_images_response(PNG, JPEG), name="vibecode", inline_image_bytes=True)
+    resp = await provider.generate_images(
+        ImageGenRequest(model="gpt-image-2", prompt="a red fox", size="1024x1024", quality="high", n=2)
+    )
+    assert [(i.data, i.mime) for i in resp.images] == [(PNG, "image/png"), (JPEG, "image/jpeg")]
+    sent = make_provider.seen[-1]
+    assert (sent.method, str(sent.url)) == ("POST", f"{BASE}/images/generations")
+    assert json.loads(sent.content) == {
+        "model": "gpt-image-2", "prompt": "a red fox", "n": 2, "size": "1024x1024", "quality": "high",
+        "response_format": "b64_json",
+    }
+
+
+async def test_openai_image_generation_omits_response_format(make_provider):
+    provider = make_provider(_images_response(PNG))  # OpenAI gpt-image rejects response_format
+    await provider.generate_images(ImageGenRequest(model="gpt-image-2", prompt="p"))
+    assert "response_format" not in json.loads(make_provider.seen[-1].content)
+
+
+async def test_image_edit_sends_reference_files_as_multipart(make_provider):
+    provider = make_provider(_images_response(PNG), name="vibecode", inline_image_bytes=True)
+    refs = [ImageInput(PNG, "image/png"), ImageInput(JPEG, "image/jpeg")]
+    resp = await provider.generate_images(
+        ImageGenRequest(model="gpt-image-2.5", prompt="put a red scarf on the fox", references=refs)
+    )
+    assert len(resp.images) == 1
+    sent = make_provider.seen[-1]
+    assert (sent.method, str(sent.url)) == ("POST", f"{BASE}/images/edits")
+    assert sent.headers["content-type"].startswith("multipart/form-data")
+    body = sent.content
+    assert b"gpt-image-2.5" in body and b"put a red scarf on the fox" in body and b"b64_json" in body
+    assert PNG in body and JPEG in body
+    assert b'filename="ref0.png"' in body and b'filename="ref1.jpg"' in body
+
+
+async def test_image_url_only_response_and_too_many_references(make_provider):
+    provider = make_provider(
+        httpx2.Response(200, json={"created": 1, "data": [{"url": "https://vibecode.invalid/f.png"}]}),
+        name="vibecode", inline_image_bytes=True,
+    )
+    with pytest.raises(IntegrationError, match="URL instead of inline bytes"):
+        await provider.generate_images(ImageGenRequest(model="gpt-image-2", prompt="p"))
+    with pytest.raises(IntegrationError) as exc:
+        await provider.generate_images(
+            ImageGenRequest(model="gpt-image-2", prompt="p", references=[ImageInput(PNG, "image/png")] * 5)
+        )
+    assert exc.value.code == IntegrationErrorCode.INVALID_INPUT
+    assert len(make_provider.seen) == 1  # the oversized edit never left the process
+
+
+async def test_mock_image_generation_is_deterministic_png():
+    p = MockAIProvider()
+    req = ImageGenRequest(model="mock-image-1", prompt="fox", size="1536x1024", n=2)
+    a, b = await p.generate_images(req), await p.generate_images(req)
+    assert [i.data for i in a.images] == [i.data for i in b.images] and len(a.images) == 2
+    img = Image.open(io.BytesIO(a.images[0].data))
+    assert (img.format, img.size, a.images[0].mime) == ("PNG", (256, 171), "image/png")
+    edit = await p.generate_images(
+        ImageGenRequest(model="mock-image-1", prompt="fox", n=3, references=[ImageInput(PNG, "image/png")])
+    )
+    assert len(edit.images) == 1  # edits return one image
+
+
+@pytest.mark.parametrize(
+    ("explicit", "demo", "vibecode_key", "openai_key", "expected"),
+    [
+        (None, False, None, None, None),
+        (None, False, "vk-x", None, "vibecode"),
+        (None, False, None, "sk-x", "openai"),
+        (None, False, "vk-x", "sk-x", "vibecode"),
+        (None, True, "vk-x", None, "mock"),
+        ("openai", False, "vk-x", "sk-x", "openai"),
+    ],
+)
+def test_effective_ai_provider(settings, explicit, demo, vibecode_key, openai_key, expected):
+    s = settings.model_copy(
+        update={
+            "ai_provider": explicit, "demo_mode": demo,
+            "vibecode_api_key": SecretStr(vibecode_key) if vibecode_key else None,
+            "openai_api_key": SecretStr(openai_key) if openai_key else None,
+        }
+    )
+    assert s.effective_ai_provider == expected
+
+
+async def test_vibecode_factory_uses_gateway_base_url(settings):
+    s = settings.model_copy(
+        update={"ai_provider": "vibecode", "vibecode_api_key": SecretStr("vk-test"),
+                "vibecode_base_url": "https://vibecode.invalid/v1"}
+    )
+    async with open_ai_provider(s) as provider:
+        assert provider.name == "vibecode" and not provider.is_mock
+        client = provider._client  # type: ignore[attr-defined]
+        assert str(client.base_url).rstrip("/") == "https://vibecode.invalid/v1"
+        assert client.api_key == "vk-test"
+    missing = settings.model_copy(update={"ai_provider": "vibecode", "vibecode_api_key": None})
+    with pytest.raises(IntegrationError) as exc:
+        async with open_ai_provider(missing):
+            pass
+    assert exc.value.code == IntegrationErrorCode.NOT_CONFIGURED
 
 
 async def test_openai_list_models(make_provider):

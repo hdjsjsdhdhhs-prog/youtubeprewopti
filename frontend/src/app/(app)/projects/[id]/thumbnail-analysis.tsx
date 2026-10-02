@@ -244,6 +244,7 @@ function AIProviderBadge({ provider, loading }: { provider: string | null; loadi
   if (loading) return null;
   if (provider === "mock") return <Badge tone="violet">AI: mock — демо-результаты</Badge>;
   if (provider === "openai") return <Badge tone="blue">AI: OpenAI</Badge>;
+  if (provider === "vibecode") return <Badge tone="blue">AI: vibecode.moe</Badge>;
   return <Badge tone="amber">AI не настроен</Badge>;
 }
 
@@ -277,8 +278,8 @@ function EstimateView({ e }: { e: AnalysisEstimate }) {
         </p>
       ) : (
         <p className="text-amber-700 dark:text-amber-400">
-          AI-провайдер не настроен: задайте <code>YTL_OPENAI_API_KEY</code> (или <code>YTL_AI_PROVIDER=mock</code> для
-          демо). Отбор уже посчитан.
+          AI-провайдер не настроен: задайте <code>YTL_VIBECODE_API_KEY</code> (или <code>YTL_AI_PROVIDER=mock</code>{" "}
+          для демо). Отбор уже посчитан.
         </p>
       )}
       <p className="text-xs text-zinc-500">

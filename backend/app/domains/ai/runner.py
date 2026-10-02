@@ -140,8 +140,8 @@ class AIRunner:
         if not models:
             raise AINotConfiguredError(
                 f"No enabled AI model for task '{task.value}' (provider: "
-                f"{self._settings.effective_ai_provider or 'not configured'}). Set YTL_OPENAI_API_KEY or "
-                "YTL_AI_PROVIDER=mock, and check the model registry.",
+                f"{self._settings.effective_ai_provider or 'not configured'}). Set YTL_VIBECODE_API_KEY "
+                "(or YTL_OPENAI_API_KEY, or YTL_AI_PROVIDER=mock) and check the model registry.",
             )
         json_schema = schema.model_json_schema()
         loaded = await self._prompt(prompt[0], prompt[1], json_schema)

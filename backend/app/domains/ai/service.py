@@ -33,7 +33,9 @@ async def ai_status(db: AsyncSession, settings: Settings) -> AIStatusOut:
     provider = settings.effective_ai_provider
     return AIStatusOut(
         provider=provider,
-        configured=provider == "mock" or (provider == "openai" and settings.openai_api_key is not None),
+        configured=provider == "mock"
+        or (provider == "openai" and settings.openai_api_key is not None)
+        or (provider == "vibecode" and settings.vibecode_api_key is not None),
         models=[AIModelOut.model_validate(m) for m in models],
     )
 

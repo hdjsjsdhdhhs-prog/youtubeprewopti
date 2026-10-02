@@ -28,6 +28,10 @@ os.environ["YTL_MIGRATION_DATABASE_URL"] = _test_url
 os.environ["YTL_ENV"] = "test"
 os.environ["YTL_LOG_JSON"] = "false"
 os.environ["YTL_LOG_LEVEL"] = "WARNING"
+# Real AI keys from the private config must never reach tests (paid calls, flaky network): tests that need
+# a provider set it explicitly and use mocked transports.
+os.environ["YTL_VIBECODE_API_KEY"] = ""
+os.environ["YTL_OPENAI_API_KEY"] = ""
 get_settings.cache_clear()
 
 use_selector_event_loop_on_windows()

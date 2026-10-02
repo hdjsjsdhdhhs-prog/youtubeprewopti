@@ -133,17 +133,19 @@ async def _ai_models() -> int:
             except IntegrationError as exc:
                 print(f"ERROR: cannot list provider models: {exc.human_message}", file=sys.stderr)
         for m in models:
-            price = (
-                f"${m.price_input_per_1m}/${m.price_output_per_1m} per 1M"
-                if m.price_input_per_1m is not None and m.price_output_per_1m is not None else "price unknown"
-            )
+            if m.price_input_per_1m is not None and m.price_output_per_1m is not None:
+                price = f"${m.price_input_per_1m}/${m.price_output_per_1m} per 1M"
+            elif m.price_per_image:
+                price = ", ".join(f"${usd}/image ({k})" for k, usd in sorted(m.price_per_image.items()))
+            else:
+                price = "price unknown"
             if available is None or m.provider != provider_name:
                 state = "-"
             else:
                 state = "AVAILABLE" if m.api_model_id in available else "NOT FOUND"
             flag = "" if m.enabled else " (disabled)"
-            print(f"  {m.key:<16} {m.provider:<7} {m.api_model_id:<22} {state:<10} {price}{flag}")
-        if available is not None and provider_name == "openai":
+            print(f"  {m.key:<22} {m.provider:<8} {m.api_model_id:<22} {state:<10} {price}{flag}")
+        if available is not None and provider_name in ("openai", "vibecode"):
             print("Provider models (first 50): " + ", ".join(sorted(available)[:50]))
     finally:
         await dispose_engine()

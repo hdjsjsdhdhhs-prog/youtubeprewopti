@@ -294,13 +294,26 @@ async def test_ai_status_and_model_prices(client, auth, settings, monkeypatch):
         "vision-premium",
         "text-bulk",
         "text-premium",
+        "vc-vision-standard",
+        "vc-vision-premium",
+        "vc-text-bulk",
+        "vc-text-premium",
+        "vc-gpt-image-2",
+        "vc-gpt-image-2.5",
+        "vc-gpt-image-2-vip",
+        "vc-nano-banana-2",
+        "vc-nano-banana-2-lite",
+        "vc-nano-banana-pro",
         "mock-vision",
         "mock-text",
+        "mock-image",
     }
     assert (
         models["vision-standard"]["pricing_verified_at"] is None
         and models["mock-vision"]["pricing_verified_at"]
     )
+    assert models["vc-vision-standard"]["price_input_per_1m"] == "0.170585"
+    assert models["vc-gpt-image-2"]["price_per_image"] == {"default": "0.013122"}
 
     url = "/api/ai/models/vision-standard"
     priced = await client.patch(
@@ -315,3 +328,5 @@ async def test_ai_status_and_model_prices(client, auth, settings, monkeypatch):
         await client.patch("/api/ai/models/nope", headers=auth, json={"enabled": False})
     ).status_code == 404
     assert (await client.patch(url, headers=auth, json={"price_input_per_1m": "-1"})).status_code == 422
+    six = await client.patch(url, headers=auth, json={"price_input_per_1m": "0.170585"})
+    assert six.json()["price_input_per_1m"] == "0.170585"  # gateway prices keep all 6 decimals

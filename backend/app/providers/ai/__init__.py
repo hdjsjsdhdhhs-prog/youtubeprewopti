@@ -7,7 +7,10 @@ from app.core.config import Settings
 from app.core.errors import IntegrationError, IntegrationErrorCode
 from app.providers.ai.base import (
     AIProvider,
+    GeneratedImage,
     ImageDetail,
+    ImageGenRequest,
+    ImageGenResponse,
     ImageInput,
     StructuredRequest,
     StructuredResponse,
@@ -16,9 +19,11 @@ from app.providers.ai.base import (
 from app.providers.ai.mock import MockAIProvider
 
 __all__ = [
-    "AIProvider", "ImageDetail", "ImageInput", "MockAIProvider", "StructuredRequest", "StructuredResponse",
-    "Usage", "open_ai_provider",
+    "AIProvider", "GeneratedImage", "ImageDetail", "ImageGenRequest", "ImageGenResponse", "ImageInput",
+    "MockAIProvider", "StructuredRequest", "StructuredResponse", "Usage", "open_ai_provider",
 ]
+
+NOT_CONFIGURED_HINT = "set YTL_VIBECODE_API_KEY (or YTL_OPENAI_API_KEY, or YTL_AI_PROVIDER=mock)"
 
 
 @asynccontextmanager
@@ -28,22 +33,36 @@ async def open_ai_provider(settings: Settings) -> AsyncIterator[AIProvider]:
     if mode == "mock":
         yield MockAIProvider()
         return
-    if mode != "openai" or settings.openai_api_key is None:
+    key = {"vibecode": settings.vibecode_api_key, "openai": settings.openai_api_key}.get(mode or "")
+    if mode is None or key is None:
         raise IntegrationError(
             IntegrationErrorCode.NOT_CONFIGURED,
-            "AI provider is not configured: set YTL_OPENAI_API_KEY (or YTL_AI_PROVIDER=mock).",
-            retryable=False, provider="openai",
+            f"AI provider is not configured: {NOT_CONFIGURED_HINT}.",
+            retryable=False, provider=mode or "ai",
         )
     from openai import AsyncOpenAI  # imported lazily: the SDK stays inside the adapter
 
     from app.providers.ai.openai_responses import OpenAIResponsesProvider
 
-    client = AsyncOpenAI(
-        api_key=settings.openai_api_key.get_secret_value(),
-        timeout=settings.openai_timeout_seconds,
-        max_retries=settings.openai_max_retries,
-    )
+    if mode == "vibecode":
+        client = AsyncOpenAI(
+            api_key=key.get_secret_value(),
+            base_url=settings.vibecode_base_url,
+            timeout=settings.vibecode_timeout_seconds,
+            max_retries=settings.vibecode_max_retries,
+        )
+        provider = OpenAIResponsesProvider(
+            client, name="vibecode", image_timeout_seconds=settings.vibecode_image_timeout_seconds,
+            inline_image_bytes=True,  # vibecode image URLs expire after a few hours
+        )
+    else:
+        client = AsyncOpenAI(
+            api_key=key.get_secret_value(),
+            timeout=settings.openai_timeout_seconds,
+            max_retries=settings.openai_max_retries,
+        )
+        provider = OpenAIResponsesProvider(client)
     try:
-        yield OpenAIResponsesProvider(client)
+        yield provider
     finally:
         await client.close()

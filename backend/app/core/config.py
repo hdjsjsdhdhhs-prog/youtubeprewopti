@@ -55,9 +55,18 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = 90.0
     openai_max_retries: int = 3  # SDK-level retries of 429/5xx/timeouts (honours retry-after)
 
-    # AI provider (ADR-0007): "openai" (needs openai_api_key) or "mock" (deterministic, offline).
-    # Unset => "mock" in demo mode, "openai" when a key is configured, otherwise not configured.
-    ai_provider: Literal["openai", "mock"] | None = None
+    # vibecode.moe: OpenAI-compatible gateway (Responses API for analysis, /images/* for generation).
+    vibecode_api_key: SecretStr | None = None
+    vibecode_base_url: str = "https://vibecode.moe/v1"
+    vibecode_timeout_seconds: float = 90.0
+    # Image generation takes tens of seconds, edits up to 2–3 minutes (provider recommends >= 4 min).
+    vibecode_image_timeout_seconds: float = 300.0
+    vibecode_max_retries: int = 2
+
+    # AI provider (ADR-0007): "vibecode" (needs vibecode_api_key), "openai" (needs openai_api_key) or
+    # "mock" (deterministic, offline). Unset => "mock" in demo mode, otherwise the provider whose key is
+    # configured (vibecode first), otherwise not configured.
+    ai_provider: Literal["vibecode", "openai", "mock"] | None = None
 
     # Thumbnails: "http" downloads from i.ytimg.com (no API quota), "mock" generates demo images.
     # Unset => "mock" in demo mode, "http" otherwise.
@@ -85,7 +94,8 @@ class Settings(BaseSettings):
     log_json: bool = True
 
     @field_validator(
-        "youtube_api_key", "openai_api_key", "thumbnail_fetcher", "youtube_provider", "ai_provider",
+        "youtube_api_key", "openai_api_key", "vibecode_api_key", "thumbnail_fetcher", "youtube_provider",
+        "ai_provider",
         "openai_vision_model", mode="before",
     )
     @classmethod
@@ -111,11 +121,13 @@ class Settings(BaseSettings):
         return "api" if self.youtube_api_key is not None else None
 
     @property
-    def effective_ai_provider(self) -> Literal["openai", "mock"] | None:
+    def effective_ai_provider(self) -> Literal["vibecode", "openai", "mock"] | None:
         if self.ai_provider is not None:
             return self.ai_provider
         if self.demo_mode:
             return "mock"
+        if self.vibecode_api_key is not None:
+            return "vibecode"
         return "openai" if self.openai_api_key is not None else None
 
 

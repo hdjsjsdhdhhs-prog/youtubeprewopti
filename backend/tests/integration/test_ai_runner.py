@@ -195,6 +195,37 @@ async def test_unavailable_model_falls_back_to_next_in_route(
     assert failed.actual_cost_usd == 0 and ok.status == AICallStatus.OK
 
 
+async def test_vibecode_route_falls_back_and_prices_with_six_decimals(
+    db, owner, sessions, settings, monkeypatch, prompts
+):
+    monkeypatch.setattr(settings, "ai_provider", "vibecode")
+    unavailable = IntegrationError(
+        IntegrationErrorCode.MODEL_UNAVAILABLE, "no such model", retryable=False, provider="vibecode"
+    )
+    provider = Scripted(unavailable, '{"score": 5, "summary": "ok"}', name="vibecode")
+    res = await _run(_runner(sessions, provider, settings, prompts), CallContext(workspace_id=owner[1].id))
+
+    assert res.model_key == "vc-vision-premium"
+    assert [r.model for r in provider.requests] == ["gpt-6-sol", "gpt-6-astra"]
+    astra = await db.scalar(select(AIModel).where(AIModel.key == "vc-vision-premium"))
+    # stored without rounding (price columns keep 6 decimals, as published by the gateway)
+    assert (astra.price_input_per_1m, astra.price_output_per_1m) == (Decimal("0.852925"), Decimal("4.264624"))
+    assert res.cost_usd == Decimal("0.001706")  # 1000 × 0.852925/1M + 200 × 4.264624/1M
+    image_models = {
+        m.api_model_id: m.price_per_image
+        for m in await db.scalars(select(AIModel).where(AIModel.provider == "vibecode"))
+        if "image_generate" in m.capabilities
+    }
+    assert image_models == {
+        "gpt-image-2": {"default": "0.013122"}, "gpt-image-2.5": {"default": "0.019683"},
+        "gpt-image-2-vip": {"default": "0.042646"}, "nano-banana-2": {"default": "0.039366"},
+        "nano-banana-2-lite": {"default": "0.016402"}, "nano-banana-pro": {"default": "0.059049"},
+    }
+    # image-only models never enter text/vision routes
+    routed = await resolve_models(db, settings, AITask.CLASSIFICATION)
+    assert [m.key for m in routed] == ["vc-text-bulk", "vc-vision-standard"]
+
+
 async def test_other_provider_errors_propagate(db, owner, sessions, mock_mode, prompts):
     boom = IntegrationError(IntegrationErrorCode.RATE_LIMITED, "slow", retryable=True, provider="mock")
     with pytest.raises(IntegrationError):

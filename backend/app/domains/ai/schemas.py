@@ -18,6 +18,7 @@ class AIModelOut(BaseModel):
     capabilities: list[str]
     price_input_per_1m: Decimal | None
     price_output_per_1m: Decimal | None
+    price_per_image: dict[str, str]  # image models: {"default": "<usd>"} (flat) or {"<quality>@<size>": …}
     pricing_verified_at: datetime | None
     enabled: bool
     notes: str
@@ -25,7 +26,7 @@ class AIModelOut(BaseModel):
 
 ModelId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 ScopeRef = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
-Price = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=4)]
+Price = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=6)]
 
 
 class AIModelUpdate(BaseModel):
@@ -41,7 +42,7 @@ class AIModelUpdate(BaseModel):
 
 
 class AIStatusOut(BaseModel):
-    provider: str | None  # active provider: "openai" | "mock" | None (not configured)
+    provider: str | None  # active provider: "vibecode" | "openai" | "mock" | None (not configured)
     configured: bool
     models: list[AIModelOut]
 

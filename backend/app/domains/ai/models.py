@@ -25,6 +25,7 @@ from app.core.db import Base, IdMixin, TimestampMixin
 from app.core.types import pg_enum
 
 COST = Numeric(14, 6)  # single calls cost fractions of a cent
+TOKEN_PRICE = Numeric(12, 6)  # USD per 1M tokens; gateways publish 6 decimals (e.g. 0.170585)
 
 
 class AIModel(IdMixin, TimestampMixin, Base):
@@ -36,11 +37,11 @@ class AIModel(IdMixin, TimestampMixin, Base):
     provider: Mapped[str] = mapped_column(String(30), nullable=False)
     api_model_id: Mapped[str] = mapped_column(String(120), nullable=False)
     capabilities: Mapped[list[str]] = mapped_column(ARRAY(String(30)), nullable=False, default=list)
-    price_input_per_1m: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
-    price_output_per_1m: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    price_input_per_1m: Mapped[Decimal | None] = mapped_column(TOKEN_PRICE)
+    price_output_per_1m: Mapped[Decimal | None] = mapped_column(TOKEN_PRICE)
     price_per_image: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, default=dict, server_default="{}"
-    )  # image generation (Phase 5): {"<quality>@<size>": usd}
+    )  # image generation (Phase 5): {"<quality>@<size>": usd} or {"default": usd} for a flat price
     pricing_verified_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")

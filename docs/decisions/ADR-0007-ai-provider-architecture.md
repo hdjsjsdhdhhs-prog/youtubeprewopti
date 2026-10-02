@@ -68,5 +68,18 @@ openai (официальный SDK), jinja2, pydantic.
 - **SDK 3.x** использует собственный HTTP-стек `httpx2`; тесты адаптера подменяют транспорт (`httpx2.MockTransport`).
   Реальный API этой машине недоступен по региону (Q-016).
 
+## Implementation notes (vibecode.moe, 2026-10-01)
+- **Провайдер `vibecode`** (решение владельца, Q-016): OpenAI-совместимый шлюз, тот же `OpenAIResponsesProvider` с
+  `base_url=https://vibecode.moe/v1` и ключом `YTL_VIBECODE_API_KEY`; отдельного адаптера не нужно. Отличаются
+  только имя провайдера в `ai_calls`/реестре, тексты ошибок и `response_format=b64_json` для картинок (ссылки
+  vibecode живут несколько часов). При наличии обоих ключей без явного `YTL_AI_PROVIDER` выбирается vibecode.
+- **Генерация изображений**: в протокол `AIProvider` добавлен `generate_images` (вместо отдельного `ImageProvider`):
+  без референсов — `/images/generations`, с 1–4 референсами — `/images/edits` (multipart). Учёт в `ai_calls`,
+  бюджеты и задачи `thumbnail_generation_*` — Phase 5; до этого вызовов из бизнес-кода нет.
+- **Реестр**: строки `vc-*` (провайдер `vibecode`) рядом с `openai`-строками; маршруты содержат ключи обоих, роутер
+  берёт только строки активного провайдера. Image-модели — capabilities `image_generate`/`image_edit`,
+  `price_per_image = {"default": usd}`.
+- **Цены за токены — NUMERIC(12,6)** (было 12,4): шлюз публикует 6 знаков, округление искажало бы оценки.
+
 ## Date
 2026-09-24

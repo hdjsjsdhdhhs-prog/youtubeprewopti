@@ -626,6 +626,10 @@ export interface components {
             price_input_per_1m: string | null;
             /** Price Output Per 1M */
             price_output_per_1m: string | null;
+            /** Price Per Image */
+            price_per_image: {
+                [key: string]: string;
+            };
             /** Pricing Verified At */
             pricing_verified_at: string | null;
             /** Enabled */

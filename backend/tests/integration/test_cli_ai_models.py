@@ -12,8 +12,10 @@ def test_ai_models_lists_registry_and_checks_mock_ids(settings, monkeypatch, cap
     assert "Active AI provider: mock" in out
     mock_line = next(line for line in out.splitlines() if "mock-vision" in line)
     assert "AVAILABLE" in mock_line
-    openai_line = next(line for line in out.splitlines() if "vision-standard" in line)
+    openai_line = next(line for line in out.splitlines() if " vision-standard " in line)
     assert "gpt-6-sol" in openai_line and "price unknown" in openai_line
+    banana = next(line for line in out.splitlines() if "vc-nano-banana-pro" in line)
+    assert "vibecode" in banana and "$0.059049/image (default)" in banana
 
 
 def test_ai_models_not_configured(settings, monkeypatch, capsys):

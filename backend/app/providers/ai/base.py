@@ -52,11 +52,42 @@ class StructuredResponse:
     incomplete_reason: str | None = None  # e.g. "max_output_tokens" (output likely truncated)
 
 
+MAX_REFERENCE_IMAGES = 4  # OpenAI-compatible /images/edits limit
+
+
+@dataclass(frozen=True)
+class ImageGenRequest:
+    """Image generation (``references`` empty) or edit (1–4 reference images, sent as files)."""
+
+    model: str  # provider's API model ID
+    prompt: str
+    references: Sequence[ImageInput] = field(default_factory=tuple)
+    size: str | None = None  # e.g. "1024x1024"; None = model default
+    quality: str | None = None
+    n: int = 1  # edits always return one image
+
+
+@dataclass(frozen=True)
+class GeneratedImage:
+    data: bytes
+    mime: str
+
+
+@dataclass(frozen=True)
+class ImageGenResponse:
+    images: list[GeneratedImage]
+    model: str
+
+
 class AIProvider(Protocol):
-    name: str  # "openai" | "mock" — matches ``ai_models.provider``
+    name: str  # "vibecode" | "openai" | "mock" — matches ``ai_models.provider``
     is_mock: bool
 
     async def generate_structured(self, request: StructuredRequest) -> StructuredResponse: ...
+
+    async def generate_images(self, request: ImageGenRequest) -> ImageGenResponse:
+        """Generate (or, with references, edit) images; bytes are returned, never temporary URLs."""
+        ...
 
     async def list_models(self) -> list[str]:
         """Model IDs available to the configured credentials (used to verify the registry, Q-004)."""

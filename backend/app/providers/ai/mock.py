@@ -7,11 +7,21 @@ Everything it returns is synthetic and labelled ``provider='mock'`` in ``ai_call
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import random
 from typing import Any
 
-from app.providers.ai.base import StructuredRequest, StructuredResponse, Usage
+from PIL import Image, ImageDraw
+
+from app.providers.ai.base import (
+    GeneratedImage,
+    ImageGenRequest,
+    ImageGenResponse,
+    StructuredRequest,
+    StructuredResponse,
+    Usage,
+)
 
 CHARS_PER_TOKEN = 4  # rough token estimate for the synthetic usage numbers
 MOCK_IMAGE_TOKENS = 85
@@ -26,7 +36,24 @@ class MockAIProvider:
         self.requests: list[StructuredRequest] = []
 
     async def list_models(self) -> list[str]:
-        return ["mock-vision-1", "mock-text-1"]
+        return ["mock-image-1", "mock-text-1", "mock-vision-1"]
+
+    async def generate_images(self, request: ImageGenRequest) -> ImageGenResponse:
+        """Small labelled PNGs seeded by model + prompt + references (edits return one image)."""
+        h = hashlib.sha256(f"{request.model}\0{request.prompt}\0{request.size}".encode())
+        for ref in request.references:
+            h.update(hashlib.sha256(ref.data).digest())
+        rng = random.Random(int.from_bytes(h.digest()[:8], "big"))  # noqa: S311 (not for security)
+        width, height = _mock_size(request.size)
+        images = []
+        for _ in range(1 if request.references else max(1, request.n)):
+            color = (rng.randint(0, 255), rng.randint(0, 255), rng.randint(0, 255))
+            img = Image.new("RGB", (width, height), color)
+            ImageDraw.Draw(img).text((8, 8), "MOCK", fill=(255, 255, 255))
+            buf = io.BytesIO()
+            img.save(buf, "PNG")
+            images.append(GeneratedImage(data=buf.getvalue(), mime="image/png"))
+        return ImageGenResponse(images=images, model=request.model)
 
     async def generate_structured(self, request: StructuredRequest) -> StructuredResponse:
         self.requests.append(request)
@@ -46,6 +73,18 @@ class MockAIProvider:
             image_inputs=len(request.images),
         )
         return StructuredResponse(text=text, refusal=None, usage=usage, model=request.model)
+
+
+MOCK_IMAGE_MAX_SIDE = 256  # keep mock output tiny regardless of the requested size
+
+
+def _mock_size(size: str | None) -> tuple[int, int]:
+    try:
+        w, h = (int(x) for x in (size or "").lower().split("x"))
+    except ValueError:
+        return MOCK_IMAGE_MAX_SIDE, MOCK_IMAGE_MAX_SIDE
+    scale = MOCK_IMAGE_MAX_SIDE / max(w, h, 1)
+    return max(1, round(w * scale)), max(1, round(h * scale))
 
 
 def _resolve(schema: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:

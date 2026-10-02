@@ -15,16 +15,20 @@ _Реализация — Phase 3 (анализ: 3.1–3.4 готовы, 3.5+ д
 | Массовая загрузка превью проекта (одна задача, новые видео первыми) | ✅ 3.1 |
 | Детерминированные метрики изображения (`image_metrics`, в той же задаче) | ✅ 3.2 (без OCR/лиц — Q-009) |
 | Prefilter (настройки проекта, предпросмотр отбора) | ✅ 3.2 |
-| AI-провайдеры (OpenAI Responses + mock), реестр, маршруты задач, версии промптов, `ai_calls`, repair, fallback | ✅ 3.3 (OpenAI — только HTTP-тесты, Q-004) |
+| AI-провайдеры (vibecode.moe + OpenAI через один Responses-адаптер, mock), реестр, маршруты задач, версии промптов, `ai_calls`, repair, fallback | ✅ 3.3 (vibecode — проверен реальными вызовами 2026-10-01; прямой OpenAI — только HTTP-тесты) |
+| Транспорт генерации/правки изображений (`generate_images`: `/images/generations`, `/images/edits`), 6 image-моделей vibecode в реестре | ✅ транспорт; учёт в `ai_calls`/бюджетах и задачи генерации — Phase 5 |
 | Budget gate: оценка, `confirm_token`, `budgets` (по умолчанию без лимита), стоп перед превышением | ✅ 3.4 (запуск анализа — 3.5) |
 | Vision-аудит превью (`thumbnail_analyses`, `thumbnail_analysis/v1`, кэш SHA-256/pHash) | ⏳ 3.5 |
 | Аудит канала, lead scoring, leads | ⏳ 3.6–3.7 |
 | Генерация превью | ⏳ Phase 5 |
 | Офферы | ⏳ Phase 6+ |
 
-Блокеры для реальных вызовов: нет `YTL_OPENAI_API_KEY`, не проверены ID/цены моделей (Q-004), и OpenAI API
-отвечает этой машине `403 unsupported_country_region_territory` (Q-016). До решения AI-этапы работают через
-mock-провайдер (`YTL_AI_PROVIDER=mock`) с пометкой в UI.
+Провайдер реальных вызовов — **vibecode.moe** (Q-016): ключ `YTL_VIBECODE_API_KEY` в приватном конфиге
+(`%USERPROFILE%\.ytlead-secrets\backend.conf`), провайдер выбирается автоматически или `YTL_AI_PROVIDER=vibecode`.
+Маршруты: анализ превью/канала — `vc-vision-standard` (`gpt-6-sol`) → `vc-vision-premium` (`gpt-6-astra`);
+bulk-текст — `vc-text-bulk` (`gpt-6-luna`). Image-модели (`vc-gpt-image-2`, `vc-gpt-image-2.5`,
+`vc-gpt-image-2-vip`, `vc-nano-banana-2`, `vc-nano-banana-2-lite`, `vc-nano-banana-pro`) работают только через
+`/images/*` и в текстовые маршруты не входят. Без ключа — mock (`YTL_AI_PROVIDER=mock`) с пометкой в UI.
 
 ### Как устроен вызов (`app/domains/ai/runner.py`)
 
