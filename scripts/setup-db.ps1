@@ -26,6 +26,9 @@ function New-Secret([int]$bytes = 24) {
 function New-Password { ([Convert]::ToBase64String((New-Secret 24)) -replace '[+/=]', 'x') }
 
 function Invoke-Psql([string]$db, [string]$sql) {
+    # psql reports notices (e.g. "extension already exists, skipping" on re-runs) on stderr; under "Stop",
+    # Windows PowerShell turns redirected stderr into a terminating error. Success is judged by the exit code.
+    $ErrorActionPreference = "Continue"
     $out = & psql -h $PgHost -p $PgPort -U postgres -d $db -v ON_ERROR_STOP=1 -tAc $sql 2>&1
     if ($LASTEXITCODE -ne 0) { throw "psql failed: $out" }
     return $out
@@ -84,7 +87,11 @@ if (-not $cfg.Contains('YTL_MASTER_KEY')) { $cfg['YTL_MASTER_KEY'] = [Convert]::
 $dir = Split-Path $ConfigFile
 New-Item -ItemType Directory -Force $dir | Out-Null
 ($cfg.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) | Set-Content -Encoding UTF8 $ConfigFile
-icacls $dir /inheritance:r /grant:r 'Administrators:(OI)(CI)F' 'SYSTEM:(OI)(CI)F' | Out-Null
+# Private ACL: the current user (who runs the backend) plus SYSTEM and local Administrators. SIDs, not names:
+# a non-admin user would otherwise lock themselves out, and group names are localized (e.g. on Russian Windows).
+$me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+icacls $dir /inheritance:r /grant:r "*${me}:(OI)(CI)F" '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "icacls failed (exit $LASTEXITCODE) on $dir" }
 
 Remove-Item Env:PGPASSWORD
 Write-Host "OK: roles ytlead_owner/ytlead_app, databases ytlead/ytlead_test ready."
