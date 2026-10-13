@@ -42,6 +42,9 @@
 - **Input:** изображение (detail по настройке: low для bulk / high для интерактивного), video title, niche, deterministic metrics (как объективный контекст), опционально 3–5 превью конкурентов ниши.
 - **Output schema `ThumbnailAudit`:** 11 subscores 1–10 (`composition, contrast, text, hierarchy, subject, color, mobile_readability, topic_relevance, visual_impact, professionalism, redesign_potential`), `has_face`, `face_emotion`, `text_present`, `text_word_count_est`, `focal_point`, `background_separation`, `clutter_level`, `problems[] {code, severity, description}`, `recommendations[] {code, action, rationale}`, `visual_summary`, `improvement_opportunity (low|medium|high)`.
   `overall_score` **не запрашивается у AI** — считается в коде: `Σ w_i·s_i / Σ w_i` по активному `scoring_profiles(kind=thumbnail)`.
+  Реализация (3.5): веса по умолчанию — 1 для десяти оценок качества и 0 для `redesign_potential` (он высокий у
+  слабых превью — это сигнал возможности для lead score, а не качества); балл не хранится, считается при чтении.
+  Словарь кодов проблем — `ProblemCode` в `app/domains/analysis/audit.py`.
   Коды проблем — фиксированный словарь (`weak_hierarchy`, `low_subject_separation`, `small_text`, `too_much_text`, `low_contrast`, `cluttered`, `no_focal_point`, `off_topic`, …) → машинно-фильтруемо, используется генератором.
 - **Запрещено в промпте:** обещания CTR в процентах; формулировки «вероятный визуальный потенциал улучшения».
 - **Prompt:** `thumbnail_analysis/v1`.

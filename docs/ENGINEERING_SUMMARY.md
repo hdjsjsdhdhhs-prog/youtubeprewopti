@@ -1,6 +1,7 @@
 # ENGINEERING SUMMARY
 
-_Обновлено: 2026-09-24 — завершён этап архитектурного исследования (до Phase 1)._
+_Обновлено: 2026-10-13 — Phase 1, 2 и 3.1–3.4 закоммичены (`a5b2f78`), провайдер AI — vibecode.moe; в работе 3.5.
+Архитектурное исследование — 2026-09-24._
 
 **PROJECT:**
 C:\youtubesistemprew
@@ -153,12 +154,30 @@ fastapi, pydantic, sqlalchemy, alembic, psycopg, procrastinate, httpx, openai, p
   обе новые карточки и бейдж mock, запуск загрузки из UI и автообновление по завершении, оценка, клиентская
   валидация, сохранение отбора и восстановление после перезагрузки, метрики под превью на карточке канала, без ошибок
   в консоли.
-- **Не проверено:** реальные вызовы OpenAI (нет ключа; API отвечает этой машине `403 unsupported_country_region_territory`
-  — Q-016), ID/цены GPT-6 (Q-004), CI на GitHub для этих изменений (не запускался — изменения не закоммичены).
-- **Следующее — 3.5:** схема `ThumbnailAudit` + промпт `thumbnail_analysis/v1`, `scoring_profiles`/`overall_score`
-  кодом, `thumbnail_analyses` + кэш SHA-256/pHash, задача анализа с `confirm_token`, UI результатов. Нужен рабочий
-  AI-провайдер (Q-016) — до этого на mock.
+- **Не проверено (на момент 3.1–3.4):** реальные вызовы OpenAI — API отвечает этой машине
+  `403 unsupported_country_region_territory` (Q-016, решено переходом на vibecode.moe, см. ниже).
+- Изменения закоммичены и запушены в `main` (`142f675`). Статус GitHub Actions для этого коммита в документации
+  не зафиксирован — проверить на вкладке Actions.
+
+**AI-ПРОВАЙДЕР VIBECODE.MOE (2026-10-02, `a5b2f78`):**
+- Решение владельца по Q-016: вместо прямого OpenAI — OpenAI-совместимый шлюз vibecode.moe. Тот же
+  `OpenAIResponsesProvider` с другим `base_url` и ключом `YTL_VIBECODE_API_KEY`; при заданном ключе выбирается
+  автоматически (`YTL_AI_PROVIDER=vibecode` — явно). Адаптер прямого OpenAI оставлен.
+- Реестр: `vc-vision-standard` (`gpt-6-sol`), `vc-vision-premium`/`vc-text-premium` (`gpt-6-astra`), `vc-text-bulk`
+  (`gpt-6-luna`) с ценами из `GET /v1/models`; image-модели `vc-gpt-image-2`, `vc-gpt-image-2.5`, `vc-gpt-image-2-vip`,
+  `vc-nano-banana-2`, `vc-nano-banana-2-lite`, `vc-nano-banana-pro` (плоская цена за картинку, `price_per_image`).
+- `AIProvider.generate_images` — `/images/generations` и `/images/edits` (multipart, 1–4 референса), байты inline.
+  Учёт в `ai_calls`/бюджетах и задачи генерации — Phase 5.
+- Цены токенов — `NUMERIC(12,6)` (миграция `0d773a65d5b6`): шлюз публикует 6 знаков.
+- Тесты обнуляют реальные AI-ключи (`conftest.py`) — платных вызовов из тестов нет.
+- Проверено реальными вызовами (2026-10-01): ID моделей, vision + `json_schema` на всех трёх GPT-6, генерация и
+  правка изображения (Q-004 — DECIDED для vibecode). `/chat/completions` с `json_schema` отвечает 400 — не используется.
+
+**СЛЕДУЮЩЕЕ — 3.5 (в работе):** схема `ThumbnailAudit` + промпт `thumbnail_analysis/v1`, `scoring_profiles` и
+`overall_score` кодом, `thumbnail_analyses` + кэш SHA-256/pHash, задача анализа с `confirm_token`, UI результатов.
+Провайдер для реальных вызовов есть (vibecode.moe); разработка и тесты — на mock.
 
 **VERIFICATION STATUS (этап архитектуры):**
 - Verified: версии пакетов (PyPI/npm), Procrastinate на Windows + PG16 (spike), квоты YouTube (официальная документация), модели gpt-image-2.5-flare/sunburst и линейка GPT-6 (документация OpenAI).
-- Unverified: API ID/цены GPT-6 (нет ключа), Docker-сборка (нет Docker Engine). (TypeScript: зафиксирован 5.9 — Q-011.)
+- Unverified: API ID/цены GPT-6 у прямого OpenAI (через vibecode.moe — проверены 2026-10-01, Q-004), Docker-сборка
+  (нет Docker Engine). (TypeScript: зафиксирован 5.9 — Q-011.)

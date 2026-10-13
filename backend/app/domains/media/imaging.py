@@ -157,6 +157,31 @@ def _dominant_colors(im: Image.Image) -> list[dict[str, float | str]]:
     return out
 
 
+VISION_MAX_WIDTH = 1280  # YouTube thumbnails are at most 1280×720; larger inputs only cost tokens
+VISION_JPEG_QUALITY = 90
+
+
+def prepare_for_vision(data: bytes) -> tuple[bytes, str, bool]:
+    """Image as sent to a vision model: black letterbox bars removed (the model must judge the thumbnail,
+    not YouTube's 4:3 padding), at most ``VISION_MAX_WIDTH`` wide, JPEG. Returns (bytes, mime, cropped).
+    Raises ``InvalidImageError``."""
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            rgb_full = np.asarray(im.convert("RGB"), dtype=np.uint8)
+    except (UnidentifiedImageError, OSError, SyntaxError) as exc:
+        raise InvalidImageError(f"not a valid image: {exc}") from exc
+    cropped, was_cropped = _crop_letterbox(rgb_full.astype(np.float64))
+    img = Image.fromarray(cropped.astype(np.uint8), "RGB")
+    if img.width > VISION_MAX_WIDTH:
+        img = img.resize(
+            (VISION_MAX_WIDTH, max(1, round(VISION_MAX_WIDTH * img.height / img.width))),
+            Image.Resampling.LANCZOS,
+        )
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=VISION_JPEG_QUALITY)
+    return buf.getvalue(), "image/jpeg", was_cropped
+
+
 def compute_image_metrics(data: bytes) -> ImageMetricValues:
     """Objective metrics of an image (Pillow + NumPy only). Raises ``InvalidImageError``."""
     try:

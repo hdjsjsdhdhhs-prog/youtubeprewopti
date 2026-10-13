@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # configured (vibecode first), otherwise not configured.
     ai_provider: Literal["vibecode", "openai", "mock"] | None = None
 
+    # Thumbnail audit cache (§34): an audit of a visually identical image (pHash Hamming distance ≤ this, of
+    # 64 bits) is reused instead of a new AI call. -1 disables the pHash step (exact SHA-256 reuse stays).
+    analysis_phash_max_distance: int = 6
+
     # Thumbnails: "http" downloads from i.ytimg.com (no API quota), "mock" generates demo images.
     # Unset => "mock" in demo mode, "http" otherwise.
     thumbnail_fetcher: Literal["http", "mock"] | None = None

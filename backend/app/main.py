@@ -14,7 +14,18 @@ from sqlalchemy import text
 
 from app.api.deps import DbSession
 from app.api.errors import install_error_handlers
-from app.api.routes import ai, analysis, auth, discovery, jobs, media, projects, taxonomy, youtube
+from app.api.routes import (
+    ai,
+    analysis,
+    auth,
+    discovery,
+    jobs,
+    media,
+    projects,
+    scoring,
+    taxonomy,
+    youtube,
+)
 from app.core.db import dispose_engine
 from app.core.logging import configure_logging
 
@@ -38,7 +49,7 @@ def create_app() -> FastAPI:
         await db.execute(text("SELECT 1"))
         return {"status": "ok", "database": "ok"}
 
-    for module in (auth, projects, taxonomy, discovery, youtube, media, analysis, ai, jobs):
+    for module in (auth, projects, taxonomy, discovery, youtube, media, analysis, scoring, ai, jobs):
         api.include_router(module.router)
     app.include_router(api)
     return app

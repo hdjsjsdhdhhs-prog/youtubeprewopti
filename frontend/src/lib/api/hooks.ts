@@ -38,6 +38,19 @@ export type PrefilterPreview = Schemas["PrefilterPreview"];
 export type AnalysisEstimate = Schemas["AnalysisEstimate"];
 export type AnalysisEstimateRequest = Schemas["AnalysisEstimateRequest"];
 export type AIStatus = Schemas["AIStatusOut"];
+export type AnalysisStartRequest = Schemas["AnalysisStartRequest"];
+export type AnalysisStartResult = Schemas["AnalysisStartResult"];
+export type ThumbnailAnalysisList = Schemas["ThumbnailAnalysisList"];
+export type AnalyzedVideo = Schemas["AnalyzedVideoOut"];
+export type ThumbnailAnalysis = Schemas["ThumbnailAnalysisOut"];
+export type AnalysisSort = Schemas["AnalysisSort"];
+export type AnalysisQuery = {
+  sort?: AnalysisSort;
+  order?: SortOrder;
+  opportunity?: "low" | "medium" | "high";
+  problem?: Schemas["ProblemCode"];
+  offset: number;
+};
 
 export const ACTIVE_JOB_STATUSES: ReadonlySet<JobStatus> = new Set(["queued", "running", "retrying"]);
 
@@ -59,6 +72,9 @@ export const qk = {
   taxonomy: ["taxonomy"] as const,
   quota: ["youtube", "quota"] as const,
   thumbnailStats: (id: number) => ["projects", "detail", id, "thumbnail-stats"] as const,
+  thumbnailAnalyses: (id: number) => ["projects", "detail", id, "thumbnail-analyses"] as const,
+  thumbnailAnalysisList: (id: number, q: AnalysisQuery) =>
+    ["projects", "detail", id, "thumbnail-analyses", q] as const,
   aiStatus: ["ai", "status"] as const,
 };
 
@@ -368,6 +384,33 @@ export function useAnalysisEstimate(projectId: number) {
           body,
         }),
       ),
+  });
+}
+
+/** Start the AI audit of exactly the confirmed estimate (409 `confirmation_required` if it changed). */
+export function useStartThumbnailAnalysis(projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AnalysisStartRequest) =>
+      unwrap(
+        api.POST("/api/projects/{project_id}/thumbnail-analysis", { params: { path: { project_id: projectId } }, body }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.jobs }),
+  });
+}
+
+export const ANALYSES_PAGE = 24;
+
+export function useThumbnailAnalyses(projectId: number, q: AnalysisQuery) {
+  return useQuery({
+    queryKey: qk.thumbnailAnalysisList(projectId, q),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/projects/{project_id}/thumbnail-analyses", {
+          params: { path: { project_id: projectId }, query: { ...q, limit: ANALYSES_PAGE } },
+        }),
+      ),
+    placeholderData: keepPreviousData,
   });
 }
 

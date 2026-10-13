@@ -1,13 +1,14 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Calculator, Download, Save } from "lucide-react";
+import { Calculator, Download, Play, Save } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { InlineError } from "@/components/states";
 import { JobStatusBadge } from "@/components/status-badges";
 import { Badge, Button, Card, Input, Label, Select } from "@/components/ui";
+import { ApiError } from "@/lib/api/client";
 import {
   ACTIVE_JOB_STATUSES,
   qk,
@@ -15,9 +16,12 @@ import {
   useAnalysisEstimate,
   useIngestProjectThumbnails,
   useJobs,
+  useStartThumbnailAnalysis,
   useThumbnailStats,
   useUpdateProject,
   type AnalysisEstimate,
+  type AnalysisEstimateRequest,
+  type AnalysisStartResult,
   type Project,
 } from "@/lib/api/hooks";
 import { formatCount, formatDateTime } from "@/lib/format";
@@ -122,15 +126,40 @@ export function ThumbnailIngestion({ project: p }: { project: Project }) {
   );
 }
 
-/** Phase 3.2 + 3.4: which thumbnails go to the AI audit and what it would cost (budget gate). */
+const isConfirmationError = (e: unknown) => e instanceof ApiError && e.code === "confirmation_required";
+
+/** Phase 3.2–3.5: which thumbnails go to the AI audit, what it would cost (budget gate) and the confirmed start. */
 export function AnalysisPrefilter({ project: p }: { project: Project }) {
   const [form, setForm] = useState<PrefilterForm>(() => formFromPrefilter(p.prefilter_settings));
   const [detail, setDetail] = useState<"low" | "high">("low");
   const [formErrors, setFormErrors] = useState<string[]>([]);
+  // The request of the estimate on screen: the start must confirm exactly that one, not later form edits.
+  const [estimated, setEstimated] = useState<AnalysisEstimateRequest | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const estimate = useAnalysisEstimate(p.id);
+  const start = useStartThumbnailAnalysis(p.id);
   const save = useUpdateProject(p.id);
   const ai = useAIStatus();
   const hasChannelFilters = Object.keys(p.filter_settings ?? {}).length > 0;
+
+  const runEstimate = (req: AnalysisEstimateRequest) => {
+    setEstimated(req);
+    estimate.mutate(req);
+  };
+  const confirmAndStart = () => {
+    if (!estimate.data || !estimated) return;
+    setNotice(null);
+    start.mutate(
+      { ...estimated, confirm_token: estimate.data.confirm_token },
+      {
+        onError: (err) => {
+          if (!isConfirmationError(err)) return;
+          setNotice("Отбор, модель или цена изменились после оценки. Проверьте новую оценку и подтвердите снова.");
+          runEstimate(estimated);
+        },
+      },
+    );
+  };
 
   const build = () => {
     const { value, errors } = prefilterFromForm(form);
@@ -155,7 +184,11 @@ export function AnalysisPrefilter({ project: p }: { project: Project }) {
         onSubmit={(e) => {
           e.preventDefault();
           const prefilter = build();
-          if (prefilter) estimate.mutate({ prefilter, detail });
+          if (prefilter) {
+            setNotice(null);
+            start.reset();
+            runEstimate({ prefilter, detail });
+          }
         }}
       >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -226,7 +259,17 @@ export function AnalysisPrefilter({ project: p }: { project: Project }) {
         </div>
         <InlineError error={estimate.error ?? save.error} />
       </form>
-      {estimate.data ? <EstimateView e={estimate.data} /> : null}
+      {estimate.data ? (
+        <EstimateView
+          e={estimate.data}
+          archived={p.status === "archived"}
+          starting={start.isPending || estimate.isPending}
+          started={start.data}
+          notice={notice}
+          startError={isConfirmationError(start.error) ? null : start.error}
+          onStart={confirmAndStart}
+        />
+      ) : null}
     </Card>
   );
 }
@@ -248,8 +291,25 @@ function AIProviderBadge({ provider, loading }: { provider: string | null; loadi
   return <Badge tone="amber">AI не настроен</Badge>;
 }
 
-function EstimateView({ e }: { e: AnalysisEstimate }) {
+function EstimateView({
+  e,
+  archived,
+  starting,
+  started,
+  notice,
+  startError,
+  onStart,
+}: {
+  e: AnalysisEstimate;
+  archived: boolean;
+  starting: boolean;
+  started: AnalysisStartResult | undefined;
+  notice: string | null;
+  startError: unknown;
+  onStart: () => void;
+}) {
   const pv = e.preview;
+  const canStart = e.model_key !== null && e.items > 0 && !archived && !starting;
   return (
     <div role="status" className="mt-3 space-y-2 rounded-md bg-zinc-50 p-3 text-sm dark:bg-zinc-800/60">
       <p>
@@ -264,7 +324,15 @@ function EstimateView({ e }: { e: AnalysisEstimate }) {
         </p>
       ) : null}
       <p>
-        К анализу: <b>{formatCount(e.items)}</b> уникальных изображений (одинаковые превью анализируются один раз).
+        К анализу: <b>{formatCount(e.items)}</b> уникальных изображений (одинаковые превью анализируются один раз)
+        {e.already_analyzed > 0 ? (
+          <>
+            {" "}
+            · уже проанализировано этой моделью и версией промпта: {formatCount(e.already_analyzed)} — бесплатно, повторно не
+            отправляются
+          </>
+        ) : null}
+        .
       </p>
       {e.model_key ? (
         <p>
@@ -300,18 +368,42 @@ function EstimateView({ e }: { e: AnalysisEstimate }) {
           ))}
         </ul>
       )}
+      {!e.within_budgets && e.items > 0 ? (
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          Оценка превышает лимит бюджета: задача остановится, когда лимит будет достигнут. Уже проанализированные превью
+          сохранятся.
+        </p>
+      ) : null}
+      {notice ? (
+        <p role="alert" className="text-xs text-amber-700 dark:text-amber-400">
+          {notice}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-700">
-        <Button size="sm" disabled title="AI-аудит превью — следующий этап (3.5)">
-          Подтвердить и запустить AI-анализ
+        <Button size="sm" disabled={!canStart} onClick={onStart}>
+          <Play className="size-3.5" aria-hidden />
+          {starting
+            ? "Запуск…"
+            : e.items === 0
+              ? "Новых превью для анализа нет"
+              : `Подтвердить и запустить: ${formatCount(e.items)} превью · ${formatUsd(e.estimated_cost_usd)}`}
         </Button>
         <span className="text-xs text-zinc-500">
-          Запуск появится с AI-аудитом превью (этап 3.5). Код подтверждения этой оценки: <code>{e.confirm_token.slice(0, 8)}</code>
-          {" · "}
+          Запускается ровно эта оценка (код <code>{e.confirm_token.slice(0, 8)}</code>); бюджеты проверяются перед каждым
+          вызовом AI{" · "}
           <Link href="/jobs" className="underline">
             Задачи
           </Link>
         </span>
       </div>
+      {started ? (
+        <p role="status" className="text-xs text-zinc-600 dark:text-zinc-300">
+          {started.job
+            ? `${started.created ? "Задача поставлена" : "Такая задача уже идёт"}: ${formatCount(started.items)} превью. Результаты появятся ниже по мере анализа.`
+            : "Все отобранные превью уже проанализированы — результаты ниже."}
+        </p>
+      ) : null}
+      <InlineError error={startError} />
     </div>
   );
 }

@@ -455,6 +455,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/thumbnail-analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Thumbnail Analysis
+         * @description Queue the AI thumbnail audit of the estimate whose ``confirm_token`` is echoed. The estimate is
+         *     recomputed: if anything changed, 409 ``confirmation_required`` returns the new token and nothing starts.
+         *     Already analysed images are not sent again (cache by image, prompt version and model).
+         */
+        post: operations["start_thumbnail_analysis_api_projects__project_id__thumbnail_analysis_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/thumbnail-analyses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Thumbnail Analyses
+         * @description Videos of the project with a current AI thumbnail audit. Default order: weakest ``overall_score``
+         *     first (best redesign candidates). ``summary`` covers all analysed videos of the project.
+         */
+        get: operations["list_thumbnail_analyses_api_projects__project_id__thumbnail_analyses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scoring-profiles/thumbnail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thumbnail Profile
+         * @description Active weights of the thumbnail ``overall_score`` (version 0 = built-in defaults).
+         */
+        get: operations["get_thumbnail_profile_api_scoring_profiles_thumbnail_get"];
+        /**
+         * Set Thumbnail Profile
+         * @description Save new weights as the next version (previous versions are kept). Stored audits are not
+         *     re-run: ``overall_score`` is recomputed from their subscores on every read.
+         */
+        put: operations["set_thumbnail_profile_api_scoring_profiles_thumbnail_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/status": {
         parameters: {
             query?: never;
@@ -685,6 +753,8 @@ export interface components {
             detail: string;
             /** Items */
             items: number;
+            /** Already Analyzed */
+            already_analyzed: number;
             /** Cost Per Item Usd */
             cost_per_item_usd: string | null;
             /** Estimated Cost Usd */
@@ -715,6 +785,90 @@ export interface components {
              * @enum {string}
              */
             detail: "low" | "high";
+        };
+        /**
+         * AnalysisSort
+         * @enum {string}
+         */
+        AnalysisSort: "overall" | "redesign_potential" | "published_at" | "views";
+        /**
+         * AnalysisStartRequest
+         * @description Start the AI thumbnail audit for exactly the estimate the user confirmed (§76).
+         */
+        AnalysisStartRequest: {
+            prefilter?: components["schemas"]["ThumbnailPrefilter"] | null;
+            /**
+             * Detail
+             * @default low
+             * @enum {string}
+             */
+            detail: "low" | "high";
+            /** Confirm Token */
+            confirm_token: string;
+        };
+        /** AnalysisStartResult */
+        AnalysisStartResult: {
+            job: components["schemas"]["JobRunOut"] | null;
+            /** Created */
+            created: boolean;
+            /** Items */
+            items: number;
+            /** Already Analyzed */
+            already_analyzed: number;
+            /** Estimated Cost Usd */
+            estimated_cost_usd: string | null;
+        };
+        /** AnalysisSummary */
+        AnalysisSummary: {
+            /** Videos Analyzed */
+            videos_analyzed: number;
+            /** Avg Overall */
+            avg_overall: string | null;
+            /** Opportunity */
+            opportunity: {
+                [key: string]: number;
+            };
+            /** Top Problems */
+            top_problems: components["schemas"]["ProblemCount"][];
+            /** Mock Results */
+            mock_results: number;
+        };
+        /** AnalyzedVideoOut */
+        AnalyzedVideoOut: {
+            /** Video Id */
+            video_id: number;
+            /** Youtube Video Id */
+            youtube_video_id: string;
+            /** Title */
+            title: string;
+            /** Published At */
+            published_at: string | null;
+            /** View Count */
+            view_count: number | null;
+            /** Channel Id */
+            channel_id: number;
+            /** Channel Title */
+            channel_title: string;
+            analysis: components["schemas"]["ThumbnailAnalysisOut"];
+        };
+        /** AuditProblem */
+        AuditProblem: {
+            code: components["schemas"]["ProblemCode"];
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "low" | "medium" | "high";
+            /** Description */
+            description: string;
+        };
+        /** AuditRecommendation */
+        AuditRecommendation: {
+            code: components["schemas"]["ProblemCode"];
+            /** Action */
+            action: string;
+            /** Rationale */
+            rationale: string;
         };
         /** BudgetCheckOut */
         BudgetCheckOut: {
@@ -1293,6 +1447,20 @@ export interface components {
             /** Sample Video Ids */
             sample_video_ids: number[];
         };
+        /**
+         * ProblemCode
+         * @description Fixed vocabulary: filterable in SQL and used by the generation brief (Phase 5).
+         *     Adding a code is backwards compatible; renaming one needs a new prompt version.
+         * @enum {string}
+         */
+        ProblemCode: "weak_hierarchy" | "no_focal_point" | "low_subject_separation" | "weak_subject" | "small_text" | "too_much_text" | "unreadable_text" | "low_contrast" | "dull_colors" | "clashing_colors" | "cluttered" | "poor_composition" | "poor_mobile_readability" | "weak_emotion" | "low_image_quality" | "off_topic" | "generic_look" | "outdated_style" | "other";
+        /** ProblemCount */
+        ProblemCount: {
+            /** Code */
+            code: string;
+            /** Count */
+            count: number;
+        };
         /** ProjectCreate */
         ProjectCreate: {
             /** Description */
@@ -1492,6 +1660,20 @@ export interface components {
             reason: string;
         };
         /**
+         * ScoringKind
+         * @enum {string}
+         */
+        ScoringKind: "thumbnail" | "lead" | "priority" | "contactability";
+        /** ScoringProfileOut */
+        ScoringProfileOut: {
+            kind: components["schemas"]["ScoringKind"];
+            /** Version */
+            version: number;
+            /** Is Default */
+            is_default: boolean;
+            weights: components["schemas"]["ThumbnailWeights"];
+        };
+        /**
          * SearchType
          * @enum {string}
          */
@@ -1548,6 +1730,96 @@ export interface components {
             name: string;
             /** Slug */
             slug: string;
+        };
+        /** ThumbnailAnalysisList */
+        ThumbnailAnalysisList: {
+            /** Items */
+            items: components["schemas"]["AnalyzedVideoOut"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            summary: components["schemas"]["AnalysisSummary"];
+            scoring: components["schemas"]["ScoringProfileOut"];
+        };
+        /** ThumbnailAnalysisOut */
+        ThumbnailAnalysisOut: {
+            /** Id */
+            id: number;
+            /** Image Asset Id */
+            image_asset_id: number;
+            /** Provider */
+            provider: string;
+            /** Model Key */
+            model_key: string;
+            /** Detail */
+            detail: string;
+            /** Reused From Id */
+            reused_from_id: number | null;
+            /** Phash Distance */
+            phash_distance: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Overall Score */
+            overall_score: string;
+            /** Composition Score */
+            composition_score: string;
+            /** Contrast Score */
+            contrast_score: string;
+            /** Text Score */
+            text_score: string;
+            /** Hierarchy Score */
+            hierarchy_score: string;
+            /** Subject Score */
+            subject_score: string;
+            /** Color Score */
+            color_score: string;
+            /** Mobile Readability */
+            mobile_readability: string;
+            /** Topic Relevance */
+            topic_relevance: string;
+            /** Visual Impact */
+            visual_impact: string;
+            /** Professionalism */
+            professionalism: string;
+            /** Redesign Potential */
+            redesign_potential: string;
+            /** Has Face */
+            has_face: boolean;
+            /** Face Emotion */
+            face_emotion: string | null;
+            /** Text Present */
+            text_present: boolean;
+            /** Text Word Count Est */
+            text_word_count_est: number;
+            /** Focal Point */
+            focal_point: string;
+            /**
+             * Background Separation
+             * @enum {string}
+             */
+            background_separation: "low" | "medium" | "high";
+            /**
+             * Clutter Level
+             * @enum {string}
+             */
+            clutter_level: "low" | "medium" | "high";
+            /**
+             * Improvement Opportunity
+             * @enum {string}
+             */
+            improvement_opportunity: "low" | "medium" | "high";
+            /** Problems */
+            problems: components["schemas"]["AuditProblem"][];
+            /** Recommendations */
+            recommendations: components["schemas"]["AuditRecommendation"][];
+            /** Visual Summary */
+            visual_summary: string;
         };
         /** ThumbnailIngestResult */
         ThumbnailIngestResult: {
@@ -1621,6 +1893,67 @@ export interface components {
             with_metrics: number;
             /** Metrics Algo Version */
             metrics_algo_version: number;
+        };
+        /**
+         * ThumbnailWeights
+         * @description Weights of the subscores in ``overall_score`` (Σ wᵢ·sᵢ / Σ wᵢ). 0 = not counted.
+         */
+        ThumbnailWeights: {
+            /**
+             * Composition Score
+             * @default 1
+             */
+            composition_score: number;
+            /**
+             * Contrast Score
+             * @default 1
+             */
+            contrast_score: number;
+            /**
+             * Text Score
+             * @default 1
+             */
+            text_score: number;
+            /**
+             * Hierarchy Score
+             * @default 1
+             */
+            hierarchy_score: number;
+            /**
+             * Subject Score
+             * @default 1
+             */
+            subject_score: number;
+            /**
+             * Color Score
+             * @default 1
+             */
+            color_score: number;
+            /**
+             * Mobile Readability
+             * @default 1
+             */
+            mobile_readability: number;
+            /**
+             * Topic Relevance
+             * @default 1
+             */
+            topic_relevance: number;
+            /**
+             * Visual Impact
+             * @default 1
+             */
+            visual_impact: number;
+            /**
+             * Professionalism
+             * @default 1
+             */
+            professionalism: number;
+            /**
+             * Redesign Potential
+             * @default 0
+             */
+            redesign_potential: number;
         };
         /** UserOut */
         UserOut: {
@@ -2619,6 +2952,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnalysisEstimate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_thumbnail_analysis_api_projects__project_id__thumbnail_analysis_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalysisStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisStartResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_thumbnail_analyses_api_projects__project_id__thumbnail_analyses_get: {
+        parameters: {
+            query?: {
+                sort?: components["schemas"]["AnalysisSort"];
+                order?: components["schemas"]["SortOrder"];
+                opportunity?: ("low" | "medium" | "high") | null;
+                problem?: components["schemas"]["ProblemCode"] | null;
+                max_overall?: number | string | null;
+                channel_id?: number | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThumbnailAnalysisList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_thumbnail_profile_api_scoring_profiles_thumbnail_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoringProfileOut"];
+                };
+            };
+        };
+    };
+    set_thumbnail_profile_api_scoring_profiles_thumbnail_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThumbnailWeights"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoringProfileOut"];
                 };
             };
             /** @description Validation Error */

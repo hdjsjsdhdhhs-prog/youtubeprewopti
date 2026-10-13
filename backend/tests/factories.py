@@ -6,6 +6,7 @@ import io
 import itertools
 from datetime import UTC, datetime, timedelta
 
+import numpy as np
 from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +21,19 @@ _seq = itertools.count(1)
 def png_bytes(color: tuple[int, int, int] = (200, 30, 30), size: tuple[int, int] = (64, 36)) -> bytes:
     buf = io.BytesIO()
     Image.new("RGB", size, color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def noise_png(seed: int, *, tweak: bool = False, size: tuple[int, int] = (160, 90)) -> bytes:
+    """Blocky random image with a distinct pHash per seed (solid colours all share pHash 0). ``tweak``
+    changes one pixel: new SHA-256, (almost) the same pHash => a visually identical copy."""
+    rng = np.random.default_rng(seed)
+    blocks = rng.integers(0, 256, size=(9, 16, 3), dtype=np.uint8)
+    img = Image.fromarray(blocks, "RGB").resize(size, Image.Resampling.NEAREST)
+    if tweak:
+        img.putpixel((0, 0), (1, 2, 3))
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
     return buf.getvalue()
 
 

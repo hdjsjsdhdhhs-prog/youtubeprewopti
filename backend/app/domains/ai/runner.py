@@ -124,6 +124,10 @@ class AIRunner:
                 await db.commit()
         return self._prompts[key]
 
+    async def prompt(self, name: str, version: int, schema: type[BaseModel]) -> LoadedPrompt:
+        """Registered prompt version (its ``template_id`` is part of analysis cache keys)."""
+        return await self._prompt(name, version, schema.model_json_schema())
+
     async def run[T: BaseModel](
         self,
         *,

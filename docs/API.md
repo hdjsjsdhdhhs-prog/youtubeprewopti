@@ -92,6 +92,10 @@ REST API на FastAPI. Базовый префикс — `/api`. Машиноч�
 | `GET /api/projects/{id}/thumbnails/stats` | read | 200 `ThumbnailStatsOut` | Сколько превью загружено / с метриками / с ошибками |
 | `POST /api/projects/{id}/prefilter/preview` | read | 200 `PrefilterPreview` | Что отберёт prefilter (тело — несохранённые настройки) |
 | `POST /api/projects/{id}/thumbnail-analysis/estimate` | read | 200 `AnalysisEstimate` | Оценка стоимости AI-аудита превью + `confirm_token` |
+| `POST /api/projects/{id}/thumbnail-analysis` | write | 202 `AnalysisStartResult` | Запуск AI-аудита подтверждённой оценки (Phase 3.5) |
+| `GET /api/projects/{id}/thumbnail-analyses` | read | 200 `ThumbnailAnalysisList` | Результаты аудита: балл, проблемы, рекомендации, сводка |
+| `GET /api/scoring-profiles/thumbnail` | read | 200 `ScoringProfileOut` | Активные веса общего балла превью |
+| `PUT /api/scoring-profiles/thumbnail` | admin | 200 `ScoringProfileOut` | Новые веса (новая версия профиля) |
 | `GET /api/ai/status` | read | 200 `AIStatusOut` | Активный AI-провайдер и реестр моделей |
 | `PATCH /api/ai/models/{key}` | admin | 200 `AIModelOut` | API ID модели, цены за 1M токенов, вкл/выкл |
 | `GET /api/ai/usage` | read | 200 `AIUsageOut` | Расход AI за сутки / месяц / всё время + бюджеты |
@@ -258,11 +262,43 @@ Mock-провайдер (`YTL_YOUTUBE_PROVIDER=mock`, по умолчанию в
 `POST /api/projects/{id}/thumbnail-analysis/estimate` `{"prefilter"?: ThumbnailPrefilter, "detail": "low"|"high"}` —
 pre-flight оценка AI-аудита превью (budget gate, §76). Ничего не вызывает и не списывает.
 Ответ: `preview`, `provider`/`model_key`/`api_model_id` (первая доступная модель маршрута задачи; `null` — AI не
-настроен), `items` (уникальные изображения: одинаковые превью анализируются один раз), `cost_per_item_usd`,
-`estimated_cost_usd` (`null` — у модели в реестре нет цены), `pricing_verified`, оценка токенов, `budgets`
-(проверка каждого применимого лимита: `would_exceed`, `reason`), `within_budgets`, `confirm_token`.
-`confirm_token` меняется при любом изменении отбора, модели, цены или `detail`; запуск анализа (этап 3.5) будет
-требовать его и вернёт `409 confirmation_required` с новым токеном, если оценка устарела.
+настроен), `items` (уникальные изображения, которым нужен вызов AI: одинаковые превью анализируются один раз),
+`already_analyzed` (отобранные изображения, у которых уже есть аудит этой версией промпта одной из моделей маршрута —
+бесплатно, повторно не отправляются), `cost_per_item_usd`, `estimated_cost_usd` (`null` — у модели в реестре нет
+цены), `pricing_verified`, оценка токенов, `budgets` (проверка каждого применимого лимита: `would_exceed`, `reason`),
+`within_budgets`, `confirm_token`. `confirm_token` меняется при любом изменении отбора (в т. ч. набора ещё не
+проанализированных изображений), модели, цены, `detail` или версии промпта.
+
+### AI-аудит превью (Phase 3.5)
+
+`POST /api/projects/{id}/thumbnail-analysis` `{"prefilter"?, "detail": "low"|"high", "confirm_token"}` (write) —
+оценка пересчитывается; если она отличается от подтверждённой — `409 confirmation_required`, в `details.confirm_token`
+новый токен, ничего не запускается. AI не настроен — `409 ai_not_configured`; проект в архиве — `409
+project_archived`. Иначе задача `thumbnail_analysis` (очередь `bulk`, `params`: `project_id`, `asset_ids`, `detail`,
+`model_key`; `job_runs.estimated_cost_usd` — из оценки). Ответ `202`: `job` (`null` — всё уже проанализировано),
+`created` (`false` — такая же задача уже идёт), `items`, `already_analyzed`, `estimated_cost_usd`.
+Задача по каждому изображению: кэш по (изображение, версия промпта, модель) → аудит визуально идентичного
+изображения (pHash, расстояние ≤ `YTL_ANALYSIS_PHASH_MAX_DISTANCE`, копия с `reused_from_id`) → вызов vision-модели
+(бюджеты проверяются перед каждым вызовом). Невалидный ответ после repair, отказ модели, отсутствующий файл —
+ошибка этого изображения в `result.failures`, задача продолжается; превышение бюджета / ошибка провайдера —
+задача `failed`, уже сохранённые аудиты остаются. `result`: `analyzed`, `cached`, `reused`, `failed`, `ai_calls`,
+`spent_usd`, `models`, `prompt`.
+
+`GET /api/projects/{id}/thumbnail-analyses` — видео каналов проекта, у превью которых есть текущий аудит.
+Параметры: `sort` (`overall` — по умолчанию, `redesign_potential`, `published_at`, `views`), `order` (`asc` по
+умолчанию — сначала слабые), `opportunity` (`low|medium|high`), `problem` (код из словаря `ProblemCode`),
+`max_overall` (1–10), `channel_id`, `limit`/`offset`. Элемент: видео + канал + `analysis` (11 оценок 1–10,
+`overall_score`, `problems[] {code, severity, description}`, `recommendations[] {code, action, rationale}`,
+`visual_summary`, `improvement_opportunity`, наблюдения про лицо/текст/фокус, `provider` (`mock` — демо),
+`model_key`, `reused_from_id`). `summary` — по всем проанализированным видео проекта (без фильтров): количество,
+средний балл, распределение `improvement_opportunity`, частые коды проблем, число mock-результатов. `scoring` —
+профиль весов, по которому посчитан `overall_score`.
+
+`overall_score` не хранится и не запрашивается у AI: Σ wᵢ·sᵢ / Σ wᵢ по весам активного профиля workspace,
+считается в SQL при каждом чтении (сортировка и фильтр по нему работают). `GET /api/scoring-profiles/thumbnail` —
+активные веса (`version: 0` — встроенные: 1 для десяти оценок качества, 0 для `redesign_potential`, т. к. это
+сигнал возможности, а не качества). `PUT` (admin) — веса 0–10 (пропущенные — по умолчанию, хотя бы один > 0),
+сохраняется новой версией; сохранённые аудиты не перезапускаются.
 
 Оценка токенов на превью: шаблон задачи (`thumbnail_analysis`: вход 1200, выход 900) + изображение (`low` — 85,
 `high` — 1105 токенов, схема OpenAI для прежних vision-моделей, для GPT-6 **не проверено**, Q-004). Фактическая

@@ -2,6 +2,7 @@
 
 from app.core.db import Base
 from app.domains.ai.models import AICall, AIModel, Budget, PromptTemplate
+from app.domains.analysis.models import ScoringProfile, ThumbnailAnalysis
 from app.domains.discovery.models import YouTubeQuotaLedger
 from app.domains.identity.models import (
     AuditLog,
@@ -33,7 +34,7 @@ from app.domains.youtube.models import (
 __all__ = [
     "AICall", "AIModel", "AuditLog", "Base", "Budget", "Channel", "ChannelDiscovery", "ChannelMetrics",
     "ChannelStatsSnapshot", "IdempotencyKey", "ImageAsset", "ImageMetrics", "JobRun", "ProjectChannel",
-    "ProjectNiche", "PromptTemplate", "SearchProject",
-    "SearchQuery", "Secret", "TaxonomyNode", "Thumbnail", "User", "UserSession", "Video",
+    "ProjectNiche", "PromptTemplate", "ScoringProfile", "SearchProject",
+    "SearchQuery", "Secret", "TaxonomyNode", "Thumbnail", "ThumbnailAnalysis", "User", "UserSession", "Video",
     "VideoStatsSnapshot", "Workspace", "WorkspaceMember", "YouTubeQuotaLedger",
 ]
