@@ -17,6 +17,7 @@ export const JOB_TYPE_LABELS: Record<string, string> = {
   thumbnail_download: "Загрузка превью",
   discovery: "Поиск каналов",
   thumbnail_analysis: "AI-аудит превью",
+  channel_analysis: "AI-аудит каналов",
 };
 
 export function JobsView() {

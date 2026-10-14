@@ -477,6 +477,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/channel-analysis/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estimate Channel Analysis
+         * @description Pre-flight estimate of the comparative AI audit of the project's channels (§17, §76). A channel
+         *     needs at least 3 audited thumbnails; channels whose exact inputs are already audited are free.
+         */
+        post: operations["estimate_channel_analysis_api_projects__project_id__channel_analysis_estimate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/channel-analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Channel Analysis
+         * @description Queue the channel audit of the estimate whose ``confirm_token`` is echoed (changed => 409
+         *     ``confirmation_required`` with the new token, nothing starts).
+         */
+        post: operations["start_channel_analysis_api_projects__project_id__channel_analysis_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/channel-analyses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Channel Analyses
+         * @description Channels of the project with a current channel audit; aggregates use the workspace's thumbnail
+         *     weights. Default order: lowest average thumbnail quality first.
+         */
+        get: operations["list_channel_analyses_api_projects__project_id__channel_analyses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/thumbnail-analyses": {
         parameters: {
             query?: never;
@@ -676,6 +739,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/channels/{channel_id}/visual-audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Channel Visual Audit
+         * @description Current comparative audit of the channel with code-computed aggregates (``analysis: null`` = not
+         *     audited yet).
+         */
+        get: operations["get_channel_visual_audit_api_channels__channel_id__visual_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -833,6 +917,19 @@ export interface components {
             /** Mock Results */
             mock_results: number;
         };
+        /** AnalyzedChannelOut */
+        AnalyzedChannelOut: {
+            /** Channel Id */
+            channel_id: number;
+            /** Youtube Channel Id */
+            youtube_channel_id: string;
+            /** Title */
+            title: string;
+            /** Subscriber Count */
+            subscriber_count: number | null;
+            analysis: components["schemas"]["ChannelAnalysisOut"];
+            aggregates: components["schemas"]["ChannelAggregates"];
+        };
         /** AnalyzedVideoOut */
         AnalyzedVideoOut: {
             /** Video Id */
@@ -951,6 +1048,192 @@ export interface components {
             max_ai_operations?: number | null;
             /** Is Active */
             is_active?: boolean | null;
+        };
+        /**
+         * ChannelAggregates
+         * @description Computed by code from the current thumbnail audits of the compared videos with the workspace's
+         *     weights (not by the AI). Bands: weak < 5, medium 5–7, strong ≥ 7.
+         */
+        ChannelAggregates: {
+            /** Thumbnails Analyzed */
+            thumbnails_analyzed: number;
+            /** Avg Score */
+            avg_score: string | null;
+            /** Median Score */
+            median_score: string | null;
+            /** Pct Weak */
+            pct_weak: string;
+            /** Pct Medium */
+            pct_medium: string;
+            /** Pct Strong */
+            pct_strong: string;
+            /** Best Video Id */
+            best_video_id: number | null;
+            /** Worst Video Id */
+            worst_video_id: number | null;
+        };
+        /** ChannelAnalysisEstimate */
+        ChannelAnalysisEstimate: {
+            /** Task */
+            task: string;
+            preview: components["schemas"]["ChannelSelectionPreview"];
+            /** Provider */
+            provider: string | null;
+            /** Model Key */
+            model_key: string | null;
+            /** Api Model Id */
+            api_model_id: string | null;
+            /** Detail */
+            detail: string;
+            /** Videos Per Channel */
+            videos_per_channel: number;
+            /** Items */
+            items: number;
+            /** Already Analyzed */
+            already_analyzed: number;
+            /** Images */
+            images: number;
+            /** Cost Per Item Usd */
+            cost_per_item_usd: string | null;
+            /** Estimated Cost Usd */
+            estimated_cost_usd: string | null;
+            /** Pricing Verified */
+            pricing_verified: boolean;
+            /** Estimated Input Tokens */
+            estimated_input_tokens: number;
+            /** Estimated Output Tokens */
+            estimated_output_tokens: number;
+            /** Budgets */
+            budgets: components["schemas"]["BudgetCheckOut"][];
+            /** Within Budgets */
+            within_budgets: boolean;
+            /** Confirm Token */
+            confirm_token: string;
+        };
+        /** ChannelAnalysisList */
+        ChannelAnalysisList: {
+            /** Items */
+            items: components["schemas"]["AnalyzedChannelOut"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            summary: components["schemas"]["ChannelAnalysisSummary"];
+            scoring: components["schemas"]["ScoringProfileOut"];
+        };
+        /** ChannelAnalysisOut */
+        ChannelAnalysisOut: {
+            /** Id */
+            id: number;
+            /** Channel Id */
+            channel_id: number;
+            /** Provider */
+            provider: string;
+            /** Model Key */
+            model_key: string;
+            /** Detail */
+            detail: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Video Ids */
+            video_ids: number[];
+            /** Visual Consistency */
+            visual_consistency: string;
+            /** Repeated Template */
+            repeated_template: boolean;
+            /** Outdated Style Score */
+            outdated_style_score: string;
+            /** Has Design System */
+            has_design_system: boolean;
+            /**
+             * Visual Opportunity
+             * @enum {string}
+             */
+            visual_opportunity: "low" | "medium" | "high";
+            /** Patterns */
+            patterns: components["schemas"]["PerformingPattern"][];
+            /** Recurring Problems */
+            recurring_problems: components["schemas"]["RecurringProblem"][];
+            /** Weakest Video Ids */
+            weakest_video_ids: number[];
+            /** Redesign Candidates */
+            redesign_candidates: components["schemas"]["RedesignCandidateOut"][];
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * ChannelAnalysisRequest
+         * @description Estimate of a comparative AI audit of the project's channels. A channel is audited from its newest
+         *     ``videos_per_channel`` non-Shorts videos that already have an AI thumbnail audit (3.5).
+         */
+        ChannelAnalysisRequest: {
+            /**
+             * Videos Per Channel
+             * @default 8
+             */
+            videos_per_channel: number;
+            /**
+             * Detail
+             * @default low
+             * @enum {string}
+             */
+            detail: "low" | "high";
+        };
+        /**
+         * ChannelAnalysisSort
+         * @enum {string}
+         */
+        ChannelAnalysisSort: "avg_score" | "visual_consistency" | "outdated_style" | "subscribers" | "analyzed_at";
+        /** ChannelAnalysisStartRequest */
+        ChannelAnalysisStartRequest: {
+            /**
+             * Videos Per Channel
+             * @default 8
+             */
+            videos_per_channel: number;
+            /**
+             * Detail
+             * @default low
+             * @enum {string}
+             */
+            detail: "low" | "high";
+            /** Confirm Token */
+            confirm_token: string;
+        };
+        /** ChannelAnalysisSummary */
+        ChannelAnalysisSummary: {
+            /** Channels Analyzed */
+            channels_analyzed: number;
+            /** Opportunity */
+            opportunity: {
+                [key: string]: number;
+            };
+            /** Mock Results */
+            mock_results: number;
+        };
+        /** ChannelAuditVideo */
+        ChannelAuditVideo: {
+            /** Video Id */
+            video_id: number;
+            /** Youtube Video Id */
+            youtube_video_id: string;
+            /** Title */
+            title: string;
+            /** Published At */
+            published_at: string | null;
+            /** View Count */
+            view_count: number | null;
+            /** Image Asset Id */
+            image_asset_id: number | null;
+            /** Overall Score */
+            overall_score: string | null;
+            /** Improvement Opportunity */
+            improvement_opportunity: ("low" | "medium" | "high") | null;
         };
         /** ChannelDetail */
         ChannelDetail: {
@@ -1128,11 +1411,32 @@ export interface components {
             is_demo: boolean;
             metrics?: components["schemas"]["ChannelMetricsOut"] | null;
         };
+        /** ChannelSelectionPreview */
+        ChannelSelectionPreview: {
+            /** Channels In Project */
+            channels_in_project: number;
+            /** Channels Ready */
+            channels_ready: number;
+            /** Channels Not Enough */
+            channels_not_enough: number;
+            /** Channels Without Audits */
+            channels_without_audits: number;
+            /** Min Thumbnails */
+            min_thumbnails: number;
+        };
         /**
          * ChannelSort
          * @enum {string}
          */
         ChannelSort: "subscribers" | "views" | "videos" | "title" | "published" | "discovered" | "avg_views" | "median_views" | "last_video" | "views_ratio" | "videos_30d";
+        /** ChannelVisualReport */
+        ChannelVisualReport: {
+            analysis: components["schemas"]["ChannelAnalysisOut"] | null;
+            aggregates: components["schemas"]["ChannelAggregates"] | null;
+            /** Videos */
+            videos: components["schemas"]["ChannelAuditVideo"][];
+            scoring: components["schemas"]["ScoringProfileOut"];
+        };
         /**
          * DiscoveryOut
          * @description Where/when/how the channel was found (§2, §50).
@@ -1430,6 +1734,16 @@ export interface components {
             /** Offset */
             offset: number;
         };
+        /**
+         * PerformingPattern
+         * @description A visual pattern that co-occurs with more views in this channel. Correlation only.
+         */
+        PerformingPattern: {
+            /** Pattern */
+            pattern: string;
+            /** Evidence */
+            evidence: string;
+        };
         /** PrefilterPreview */
         PrefilterPreview: {
             /** Channels In Project */
@@ -1649,6 +1963,24 @@ export interface components {
             limit: number;
             /** Remaining */
             remaining: number;
+        };
+        /** RecurringProblem */
+        RecurringProblem: {
+            code: components["schemas"]["ProblemCode"];
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "low" | "medium" | "high";
+            /** Description */
+            description: string;
+        };
+        /** RedesignCandidateOut */
+        RedesignCandidateOut: {
+            /** Video Id */
+            video_id: number;
+            /** Why */
+            why: string;
         };
         /** RejectedLine */
         RejectedLine: {
@@ -3000,6 +3332,114 @@ export interface operations {
             };
         };
     };
+    estimate_channel_analysis_api_projects__project_id__channel_analysis_estimate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelAnalysisRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelAnalysisEstimate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_channel_analysis_api_projects__project_id__channel_analysis_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelAnalysisStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisStartResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_channel_analyses_api_projects__project_id__channel_analyses_get: {
+        parameters: {
+            query?: {
+                sort?: components["schemas"]["ChannelAnalysisSort"];
+                order?: components["schemas"]["SortOrder"];
+                opportunity?: ("low" | "medium" | "high") | null;
+                problem?: components["schemas"]["ProblemCode"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelAnalysisList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_thumbnail_analyses_api_projects__project_id__thumbnail_analyses_get: {
         parameters: {
             query?: {
@@ -3370,6 +3810,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_channel_visual_audit_api_channels__channel_id__visual_audit_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelVisualReport"];
                 };
             };
             /** @description Validation Error */

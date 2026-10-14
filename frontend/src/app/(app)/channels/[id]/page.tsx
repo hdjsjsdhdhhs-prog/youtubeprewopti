@@ -20,6 +20,8 @@ import {
 import { formatCount, formatDate, formatDateTime, formatDuration, formatRatio } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+import { ChannelVisualAudit } from "./visual-audit";
+
 export default function ChannelDetailPage() {
   const { id: rawId } = useParams<{ id: string }>();
   const id = Number(rawId);
@@ -66,6 +68,7 @@ function ChannelView({ id }: { id: number }) {
       />
       <Stats channel={c} />
       <Performance channel={c} />
+      <ChannelVisualAudit channelId={c.id} />
       {c.description ? <p className="mt-3 max-w-3xl whitespace-pre-line text-sm text-zinc-600 dark:text-zinc-400">{c.description}</p> : null}
       <Discoveries channel={c} />
       <Thumbnails channel={c} />

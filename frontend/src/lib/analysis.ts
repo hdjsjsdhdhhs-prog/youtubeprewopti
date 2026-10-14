@@ -66,6 +66,29 @@ export function opportunityTone(level: Level): "green" | "amber" | "neutral" {
   return level === "high" ? "green" : level === "medium" ? "amber" : "neutral";
 }
 
+/** Tone of a "higher = worse" channel score (outdated style): the inverse of `scoreTone`. */
+export function inverseScoreTone(score: number | string): "red" | "amber" | "green" {
+  const s = typeof score === "string" ? Number(score) : score;
+  if (s >= 7) return "red";
+  if (s >= 5) return "amber";
+  return "green";
+}
+
+/** Weak / medium / strong shares of a channel's thumbnails (API: percentages as decimal strings). Widths are
+ * clamped so a rounding sum of 100,1 % never overflows the bar. */
+export function bandWidths(a: { pct_weak: string; pct_medium: string; pct_strong: string }): [number, number, number] {
+  const clamp = (v: string) => Math.min(100, Math.max(0, Number(v) || 0));
+  const weak = clamp(a.pct_weak);
+  const medium = Math.min(clamp(a.pct_medium), 100 - weak);
+  return [weak, medium, Math.min(clamp(a.pct_strong), 100 - weak - medium)];
+}
+
+export function formatPercent(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const v = typeof value === "string" ? Number(value) : value;
+  return Number.isFinite(v) ? `${Math.round(v)} %` : "—";
+}
+
 export function formatScore(score: number | string | null | undefined): string {
   if (score === null || score === undefined || score === "") return "—";
   const s = typeof score === "string" ? Number(score) : score;

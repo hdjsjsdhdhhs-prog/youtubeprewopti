@@ -37,6 +37,7 @@ import { LEVEL_LABELS, taxonomyOptions, taxonomyPath } from "@/lib/taxonomy";
 import { cn } from "@/lib/utils";
 
 import { AnalysisResults } from "./analysis-results";
+import { ChannelAudit } from "./channel-analysis";
 import { AnalysisPrefilter, ThumbnailIngestion } from "./thumbnail-analysis";
 
 export default function ProjectDetailPage() {
@@ -80,6 +81,7 @@ function ProjectDetail({ id }: { id: number }) {
         <ThumbnailIngestion project={p} />
         <AnalysisPrefilter project={p} />
         <AnalysisResults project={p} />
+        <ChannelAudit project={p} />
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <QueriesList projectId={id} />

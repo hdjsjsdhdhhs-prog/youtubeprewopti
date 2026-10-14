@@ -181,7 +181,7 @@ async def save_analysis(
     return new_id
 
 
-async def _project_niches(db: AsyncSession, project_id: int) -> str:
+async def project_niches(db: AsyncSession, project_id: int) -> str:
     names = list(
         await db.scalars(
             select(TaxonomyNode.name)
@@ -269,7 +269,7 @@ class ThumbnailAuditJob:
         self.model_keys = [m.key for m in models]
         self.template_id = (await self.runner.prompt(*THUMBNAIL_PROMPT, ThumbnailAudit)).template_id
         async with self.sessions() as db:
-            self.niches = await _project_niches(db, self.project_id)
+            self.niches = await project_niches(db, self.project_id)
 
     async def audit_one(self, asset_id: int) -> tuple[AuditOutcome, str | None]:
         async with self.sessions() as db:

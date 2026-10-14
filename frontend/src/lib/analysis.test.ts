@@ -1,6 +1,34 @@
 import { describe, expect, it } from "vitest";
 
-import { formatScore, opportunityTone, problemLabel, scoreTone, SUBSCORES } from "./analysis";
+import {
+  bandWidths,
+  formatPercent,
+  formatScore,
+  inverseScoreTone,
+  opportunityTone,
+  problemLabel,
+  scoreTone,
+  SUBSCORES,
+} from "./analysis";
+
+describe("channel audit helpers", () => {
+  it("colours 'higher = worse' scores inversely", () => {
+    expect([inverseScoreTone("8.00"), inverseScoreTone(5), inverseScoreTone(4.99)]).toEqual(["red", "amber", "green"]);
+  });
+
+  it("keeps band widths within 100 %", () => {
+    expect(bandWidths({ pct_weak: "50.0", pct_medium: "25.0", pct_strong: "25.0" })).toEqual([50, 25, 25]);
+    expect(bandWidths({ pct_weak: "33.3", pct_medium: "33.3", pct_strong: "33.4" })).toEqual([33.3, 33.3, 33.4]);
+    const [w, m, s] = bandWidths({ pct_weak: "66.7", pct_medium: "33.4", pct_strong: "0.0" });
+    expect(w + m + s).toBeLessThanOrEqual(100);
+    expect(bandWidths({ pct_weak: "x", pct_medium: "-5", pct_strong: "120" })).toEqual([0, 0, 100]);
+  });
+
+  it("formats percentages", () => {
+    expect(formatPercent("33.3")).toBe("33 %");
+    expect(formatPercent(null)).toBe("—");
+  });
+});
 
 describe("thumbnail audit helpers", () => {
   it("keeps the backend subscore order", () => {

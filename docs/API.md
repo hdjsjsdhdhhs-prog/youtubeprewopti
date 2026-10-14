@@ -96,6 +96,10 @@ REST API на FastAPI. Базовый префикс — `/api`. Машиноч�
 | `GET /api/projects/{id}/thumbnail-analyses` | read | 200 `ThumbnailAnalysisList` | Результаты аудита: балл, проблемы, рекомендации, сводка |
 | `GET /api/scoring-profiles/thumbnail` | read | 200 `ScoringProfileOut` | Активные веса общего балла превью |
 | `PUT /api/scoring-profiles/thumbnail` | admin | 200 `ScoringProfileOut` | Новые веса (новая версия профиля) |
+| `POST /api/projects/{id}/channel-analysis/estimate` | read | 200 `ChannelAnalysisEstimate` | Оценка стоимости сравнительного аудита каналов + `confirm_token` (Phase 3.6) |
+| `POST /api/projects/{id}/channel-analysis` | write | 202 `AnalysisStartResult` | Запуск аудита каналов подтверждённой оценки |
+| `GET /api/projects/{id}/channel-analyses` | read | 200 `ChannelAnalysisList` | Каналы проекта с аудитом: оценки AI + агрегаты кодом |
+| `GET /api/channels/{id}/visual-audit` | read | 200 `ChannelVisualReport` | Текущий аудит канала, агрегаты, сравнённые превью |
 | `GET /api/ai/status` | read | 200 `AIStatusOut` | Активный AI-провайдер и реестр моделей |
 | `PATCH /api/ai/models/{key}` | admin | 200 `AIModelOut` | API ID модели, цены за 1M токенов, вкл/выкл |
 | `GET /api/ai/usage` | read | 200 `AIUsageOut` | Расход AI за сутки / месяц / всё время + бюджеты |
@@ -303,6 +307,46 @@ project_archived`. Иначе задача `thumbnail_analysis` (очередь 
 Оценка токенов на превью: шаблон задачи (`thumbnail_analysis`: вход 1200, выход 900) + изображение (`low` — 85,
 `high` — 1105 токенов, схема OpenAI для прежних vision-моделей, для GPT-6 **не проверено**, Q-004). Фактическая
 стоимость каждого вызова считается по `usage` из ответа API.
+
+### Аудит каналов: сравнение превью (Phase 3.6, ТЗ §17)
+
+Вход канала — его новейшие `videos_per_channel` (3–12, по умолчанию 8) видео без Shorts, у превью которых есть
+текущий AI-аудит (3.5); меньше 3 таких превью — канал не проверяется. Модель видит все превью вместе (image N =
+Video N) с названиями, датами, просмотрами и индивидуальными аудитами.
+
+`POST /api/projects/{id}/channel-analysis/estimate` `{"videos_per_channel"?: 3..12, "detail": "low"|"high"}` →
+`preview` (`channels_in_project`, `channels_ready`, `channels_not_enough`, `channels_without_audits`,
+`min_thumbnails`), модель, `items` (каналы, которым нужен вызов), `already_analyzed` (каналы, у которых уже есть аудит
+ровно этих входных данных — бесплатно), `images`, `cost_per_item_usd` (среднее на канал), `estimated_cost_usd`,
+оценка токенов (шаблон `channel_analysis`: вход 3000, выход 1200 + изображения), `budgets`, `within_budgets`,
+`confirm_token`. Ничего не вызывает и не списывает.
+
+`POST /api/projects/{id}/channel-analysis` `{"videos_per_channel"?, "detail", "confirm_token"}` (write) — те же
+правила, что у аудита превью: изменившаяся оценка → `409 confirmation_required` с новым токеном; `409
+ai_not_configured`; `409 project_archived`. Задача `channel_analysis` (очередь `bulk`, `params`: `project_id`,
+`channel_ids`, `videos_per_channel`, `detail`, `model_key`). По каждому каналу: кэш по (канал, `inputs_digest`, версия
+промпта, модель), где digest — видео, их изображения и id их аудитов превью (новое видео, новое превью или новый
+аудит превью → новый аудит канала) → иначе один vision-вызов со всеми превью. `result`: `analyzed`, `cached`,
+`not_enough`, `failed`, `ai_calls`, `spent_usd`, `failures[] {channel_id, error}`.
+
+`GET /api/projects/{id}/channel-analyses` — каналы проекта с текущим аудитом. `sort`: `avg_score` (по умолчанию,
+`asc` — сначала со слабыми превью), `visual_consistency`, `outdated_style`, `subscribers`, `analyzed_at`; `order`;
+`opportunity` (`visual_opportunity`); `problem` (код повторяющейся проблемы); `limit`/`offset`. Элемент: канал +
+`analysis` + `aggregates`. `summary`: `channels_analyzed`, распределение `visual_opportunity`, `mock_results`.
+
+`GET /api/channels/{id}/visual-audit` → `{"analysis": ChannelAnalysisOut | null, "aggregates", "videos", "scoring"}`
+(`null` — канал ещё не проверялся; канал не виден workspace — 404). `videos` — сравнённые видео в порядке, в котором их
+видела модель, с текущим `overall_score` превью.
+
+`ChannelAnalysisOut` — то, что оценил AI: `visual_consistency` 1–10, `repeated_template`, `outdated_style_score` 1–10
+(**выше = более устаревший**), `has_design_system`, `visual_opportunity`, `patterns[] {pattern, evidence}` (что чаще
+у видео с бо́льшими просмотрами — наблюдение, не причина), `recurring_problems[] {code, frequency, description}`,
+`weakest_video_ids`, `redesign_candidates[] {video_id, why}`, `summary`, `video_ids`. Номера видео из ответа модели
+переводятся в id кодом; несуществующие номера отбрасываются.
+
+`aggregates` **считает код**, а не AI: по текущим аудитам превью сравнённых видео с весами активного профиля workspace
+(как `overall_score`) — `thumbnails_analyzed`, `avg_score`, `median_score`, `pct_weak` (< 5), `pct_medium`,
+`pct_strong` (≥ 7), `best_video_id`, `worst_video_id`. Смена весов сразу меняет агрегаты без повторного аудита.
 
 ### AI: реестр моделей, расходы и бюджеты (Phase 3.3–3.4)
 

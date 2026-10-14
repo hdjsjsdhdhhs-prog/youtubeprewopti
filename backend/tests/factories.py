@@ -5,11 +5,15 @@ from __future__ import annotations
 import io
 import itertools
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import numpy as np
 from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.ai.models import PromptTemplate
+from app.domains.analysis.audit import SUBSCORES
+from app.domains.analysis.models import AILevel, ThumbnailAnalysis
 from app.domains.jobs.models import JobRun
 from app.domains.media.models import FetchStatus, ImageAsset, Thumbnail
 from app.domains.projects.models import ProjectChannel, SearchProject
@@ -82,6 +86,42 @@ async def video(
     )
     await db.flush()
     return v
+
+
+async def prompt_template(
+    db: AsyncSession, name: str = "thumbnail_analysis", version: int = 1
+) -> PromptTemplate:
+    t = PromptTemplate(name=name, version=version, content_hash="x" * 64, body="b", output_schema={})
+    db.add(t)
+    await db.flush()
+    return t
+
+
+async def thumbnail_analysis(
+    db: AsyncSession,
+    template: PromptTemplate,
+    asset: ImageAsset,
+    *,
+    provider: str = "mock",
+    model_key: str = "mock-vision",
+    codes: tuple[str, ...] | list[str] = (),
+    opportunity: str = "medium",
+    is_current: bool = True,
+    **scores: float,
+) -> ThumbnailAnalysis:
+    """A stored AI thumbnail audit; subscores default to 5 (``overall_score`` 5.00 with default weights)."""
+    row = ThumbnailAnalysis(
+        image_asset_id=asset.id, prompt_template_id=template.id, provider=provider, model_key=model_key,
+        detail="low", is_current=is_current, has_face=False, text_present=False, text_word_count_est=0,
+        focal_point="-", background_separation=AILevel.LOW, clutter_level=AILevel.LOW,
+        improvement_opportunity=AILevel(opportunity),
+        problems=[{"code": c, "severity": "high", "description": c} for c in codes],
+        recommendations=[], problem_codes=sorted(set(codes)), visual_summary="s",
+        **{k: Decimal(str(scores.get(k, 5))) for k in SUBSCORES},
+    )
+    db.add(row)
+    await db.flush()
+    return row
 
 
 async def job_run(db: AsyncSession, workspace_id: int, **kw) -> JobRun:

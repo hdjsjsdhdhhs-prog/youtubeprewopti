@@ -51,6 +51,7 @@ def create_app() -> FastAPI:
 
     for module in (auth, projects, taxonomy, discovery, youtube, media, analysis, scoring, ai, jobs):
         api.include_router(module.router)
+    api.include_router(analysis.channel_router)
     app.include_router(api)
     return app
 

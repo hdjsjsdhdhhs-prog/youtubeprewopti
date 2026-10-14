@@ -8,6 +8,13 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domains.analysis.audit import DEFAULT_WEIGHTS, SUBSCORES, AuditProblem, AuditRecommendation, Level
+from app.domains.analysis.channel_audit import (
+    DEFAULT_THUMBNAILS,
+    MAX_THUMBNAILS,
+    MIN_THUMBNAILS,
+    PerformingPattern,
+    RecurringProblem,
+)
 from app.domains.analysis.models import ScoringKind
 from app.domains.jobs.schemas import JobRunOut
 
@@ -228,4 +235,140 @@ class ThumbnailAnalysisList(BaseModel):
     limit: int
     offset: int
     summary: AnalysisSummary
+    scoring: ScoringProfileOut
+
+
+# ---------------------------------------------------------------------------
+# Channel audit (Phase 3.6, ТЗ §17)
+# ---------------------------------------------------------------------------
+class ChannelAnalysisRequest(BaseModel):
+    """Estimate of a comparative AI audit of the project's channels. A channel is audited from its newest
+    ``videos_per_channel`` non-Shorts videos that already have an AI thumbnail audit (3.5)."""
+
+    model_config = ConfigDict(extra="forbid")
+    videos_per_channel: int = Field(default=DEFAULT_THUMBNAILS, ge=MIN_THUMBNAILS, le=MAX_THUMBNAILS)
+    detail: Literal["low", "high"] = "low"
+
+
+class ChannelSelectionPreview(BaseModel):
+    channels_in_project: int
+    channels_ready: int  # ≥ MIN_THUMBNAILS audited thumbnails => can be audited
+    channels_not_enough: int  # 1 … MIN_THUMBNAILS-1 audited thumbnails (audit more thumbnails first)
+    channels_without_audits: int  # no audited thumbnail at all
+    min_thumbnails: int
+
+
+class ChannelAnalysisEstimate(BaseModel):
+    task: str
+    preview: ChannelSelectionPreview
+    provider: str | None  # None => AI not configured
+    model_key: str | None
+    api_model_id: str | None
+    detail: str
+    videos_per_channel: int
+    items: int  # channels that need an AI call (ready minus already audited with the same inputs)
+    already_analyzed: int  # ready channels with a stored audit of exactly these inputs (free)
+    images: int  # thumbnails sent over all ``items`` calls
+    cost_per_item_usd: Decimal | None  # average per channel; None => model price unknown
+    estimated_cost_usd: Decimal | None
+    pricing_verified: bool
+    estimated_input_tokens: int
+    estimated_output_tokens: int
+    budgets: list[BudgetCheckOut]
+    within_budgets: bool
+    confirm_token: str
+
+
+class ChannelAnalysisStartRequest(ChannelAnalysisRequest):
+    confirm_token: str = Field(min_length=1, max_length=64)
+
+
+class RedesignCandidateOut(BaseModel):
+    video_id: int
+    why: str
+
+
+class ChannelAnalysisOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    channel_id: int
+    provider: str  # "mock" => synthetic demo result
+    model_key: str
+    detail: str
+    created_at: datetime
+    video_ids: list[int]  # the compared videos, newest first
+    visual_consistency: Decimal
+    repeated_template: bool
+    outdated_style_score: Decimal  # higher = more outdated
+    has_design_system: bool
+    visual_opportunity: Level
+    patterns: list[PerformingPattern]  # co-occurrence with views, not causation
+    recurring_problems: list[RecurringProblem]
+    weakest_video_ids: list[int]
+    redesign_candidates: list[RedesignCandidateOut]
+    summary: str
+
+
+class ChannelAggregates(BaseModel):
+    """Computed by code from the current thumbnail audits of the compared videos with the workspace's
+    weights (not by the AI). Bands: weak < 5, medium 5–7, strong ≥ 7."""
+
+    thumbnails_analyzed: int
+    avg_score: Decimal | None
+    median_score: Decimal | None
+    pct_weak: Decimal
+    pct_medium: Decimal
+    pct_strong: Decimal
+    best_video_id: int | None
+    worst_video_id: int | None
+
+
+class ChannelAuditVideo(BaseModel):
+    video_id: int
+    youtube_video_id: str
+    title: str
+    published_at: datetime | None
+    view_count: int | None
+    image_asset_id: int | None
+    overall_score: Decimal | None  # current thumbnail audit, workspace weights
+    improvement_opportunity: Level | None
+
+
+class ChannelVisualReport(BaseModel):
+    analysis: ChannelAnalysisOut | None  # None => the channel has not been audited yet
+    aggregates: ChannelAggregates | None
+    videos: list[ChannelAuditVideo]  # the compared videos in the order the model saw them
+    scoring: ScoringProfileOut
+
+
+class AnalyzedChannelOut(BaseModel):
+    channel_id: int
+    youtube_channel_id: str
+    title: str
+    subscriber_count: int | None
+    analysis: ChannelAnalysisOut
+    aggregates: ChannelAggregates
+
+
+class ChannelAnalysisSort(StrEnum):
+    AVG_SCORE = "avg_score"
+    VISUAL_CONSISTENCY = "visual_consistency"
+    OUTDATED_STYLE = "outdated_style"
+    SUBSCRIBERS = "subscribers"
+    ANALYZED_AT = "analyzed_at"
+
+
+class ChannelAnalysisSummary(BaseModel):
+    channels_analyzed: int  # channels of the project with a current channel audit (all filters off)
+    opportunity: dict[str, int]  # visual_opportunity -> channels
+    mock_results: int
+
+
+class ChannelAnalysisList(BaseModel):
+    items: list[AnalyzedChannelOut]
+    total: int
+    limit: int
+    offset: int
+    summary: ChannelAnalysisSummary
     scoring: ScoringProfileOut

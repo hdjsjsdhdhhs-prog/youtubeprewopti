@@ -1,6 +1,6 @@
 # ENGINEERING SUMMARY
 
-_Обновлено: 2026-10-13 — Phase 1, 2 и 3.1–3.4 закоммичены (`a5b2f78`), провайдер AI — vibecode.moe; в работе 3.5.
+_Обновлено: 2026-10-14 — Phase 1, 2, 3.1–3.5 закоммичены (`f0c76ef`), 3.6 (аудит канала) реализована, не закоммичена; следующая — 3.7.
 Архитектурное исследование — 2026-09-24._
 
 **PROJECT:**
@@ -173,9 +173,49 @@ fastapi, pydantic, sqlalchemy, alembic, psycopg, procrastinate, httpx, openai, p
 - Проверено реальными вызовами (2026-10-01): ID моделей, vision + `json_schema` на всех трёх GPT-6, генерация и
   правка изображения (Q-004 — DECIDED для vibecode). `/chat/completions` с `json_schema` отвечает 400 — не используется.
 
-**СЛЕДУЮЩЕЕ — 3.5 (в работе):** схема `ThumbnailAudit` + промпт `thumbnail_analysis/v1`, `scoring_profiles` и
-`overall_score` кодом, `thumbnail_analyses` + кэш SHA-256/pHash, задача анализа с `confirm_token`, UI результатов.
-Провайдер для реальных вызовов есть (vibecode.moe); разработка и тесты — на mock.
+**PHASE 3.5 — AI-АУДИТ ПРЕВЬЮ (2026-10-13, `f0c76ef`):** схема `ThumbnailAudit` + промпт `thumbnail_analysis/v1`,
+задача `thumbnail_analysis` по подтверждённой оценке (`confirm_token`), кэш SHA-256 → pHash (копия с
+`reused_from_id`), `scoring_profiles` (веса по workspace, версии) и `overall_score` кодом при чтении,
+`redesign_potential` по умолчанию вне балла качества, UI результатов на странице проекта. Миграция `7e3f5a9c1b24`.
+Состояние на начало 3.6 (проверено 2026-10-14 на `f0c76ef`): backend `pytest` 257 passed / 1 skipped. Реальные вызовы
+vibecode для `thumbnail_analysis/v1` — **не проверены** (разработка на mock).
+
+**PHASE 3.6 — СРАВНИТЕЛЬНЫЙ АУДИТ КАНАЛА (2026-10-14):** ТЗ §17, AI_ARCHITECTURE §3.
+- Решения владельца (2026-10-14): порядок 3.6 → 3.7 отдельными коммитами; в 3.7 Contactability — вес 0 и «нет
+  данных» до Phase 6; лиды создаются автоматически; разработка только на mock, без платных вызовов.
+- Вход канала — новейшие 3–12 (по умолчанию 8) видео без Shorts с текущим аудитом превью; меньше 3 — `not_enough`.
+  Один vision-вызов со всеми превью и списком «Video N» (название, дата, просмотры, балл и проблемы аудита превью;
+  балл — по встроенным весам, т. к. аудит канала глобальный).
+- `ChannelVisualAudit` (`app/domains/analysis/channel_audit.py`): единство стиля, шаблон, устаревание (выше = хуже),
+  дизайн-система, паттерны «у видео с бо́льшими просмотрами» (наблюдение, не причина), повторяющиеся проблемы из
+  словаря `ProblemCode`, номера слабейших видео и кандидатов на редизайн (код переводит в id, несуществующие
+  отбрасывает), `visual_opportunity`, `summary`. Промпт `channel_analysis/v1`.
+- `channel_analyses` (миграция `19ef5d0fb95e`): кэш (канал, `inputs_digest`, версия промпта, модель); digest — видео +
+  изображения + id аудитов превью. Агрегаты (avg/median, доли < 5 / 5–7 / ≥ 7, лучшее/худшее) не хранятся — SQL при
+  чтении по весам workspace (`channel_service.aggregates_subquery`); общий хелпер `budget_checks` для оценок.
+- API: `POST …/channel-analysis/estimate`, `POST …/channel-analysis` (`confirm_token`, 409 при изменении),
+  `GET …/channel-analyses` (сортировки, фильтры по потенциалу и проблеме), `GET /api/channels/{id}/visual-audit`.
+  Задача `channel_analysis` (очередь `bulk`), ошибки отдельного канала не останавливают задачу.
+- Frontend: блок «Аудит каналов» на странице проекта (оценка, подтверждение, запуски, список с раскрытием),
+  «Визуальный аудит канала» на карточке канала (сравнённые превью по номерам, слабые/кандидаты); общий компонент
+  `components/channel-audit.tsx`; `vitest.setup.ts` — `cleanup()` после каждого теста (первые компонентные тесты).
+- Миграция применена к `ytlead`; `alembic check` — без расхождений; права `ytlead_app` на `channel_analyses`
+  проверены (DML да, DDL — `InsufficientPrivilege`).
+- Проверки: backend `pytest` **278 passed / 1 skipped** (+21: схема и маппинг номеров, digest, отбор входа, кэш,
+  повторный аудит после нового аудита превью, ошибки канала, бюджет, API оценки/запуска/агрегатов/весов/ролей/изоляции,
+  сквозной воркер «аудит превью → аудит канала»), `ruff check .`, `mypy app`; frontend `npm run lint` (0 ошибок,
+  прежнее предупреждение `useVirtualizer`), `npm run typecheck`, `npm test` — 43 (+7: хелперы и 4 render-теста
+  компонента аудита), `next build`. Сквозная проверка реальными процессами (uvicorn + воркер + `next start`, тестовая
+  БД, mock, через Next-прокси): demo-seed → метрики → аудит 36 превью → оценка 6 каналов → неверный токен 409, без CSRF
+  403 → запуск 202 → воркер 6/6 → список (сортировка по среднему), отчёт канала, картинки, повторная оценка $0,
+  другой `videos_per_channel` — новые входы; страницы проекта, канала и задач — 200 (18 проверок).
+- **Не проверено:** реальные вызовы vibecode для `channel_analysis/v1`; отрисовка UI в браузере (Playwright на машине
+  не установлен — проверены только SSR-ответы страниц и render-тесты в jsdom); CI для этих изменений (не закоммичены).
+
+**СЛЕДУЮЩЕЕ — 3.7:** `leads`, `lead_scores`, `lead_status_history`, `ideal_lead_profiles`, профили `lead`/`priority`
+в `scoring_profiles`, детерминированный объяснимый Lead Score (компоненты «баллы/максимум» + причина),
+автосоздание лидов (`DISCOVERED`/`ANALYZED`), Contactability — вес 0 до Phase 6, UI лидов с фильтрами (§9) и
+редактором весов.
 
 **VERIFICATION STATUS (этап архитектуры):**
 - Verified: версии пакетов (PyPI/npm), Procrastinate на Windows + PG16 (spike), квоты YouTube (официальная документация), модели gpt-image-2.5-flare/sunburst и линейка GPT-6 (документация OpenAI).

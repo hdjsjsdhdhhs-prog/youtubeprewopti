@@ -184,6 +184,21 @@ async def analyzed_assets(db: AsyncSession, asset_ids: list[int], model_keys: li
     )
 
 
+async def budget_checks(
+    db: AsyncSession, workspace_id: int, project_id: int, task: AITask, total: Decimal | None, items: int
+) -> list[BudgetCheckOut]:
+    """Would ``items`` AI calls costing ``total`` exceed any applicable budget (pre-flight view, §76)?"""
+    checks: list[BudgetCheckOut] = []
+    for b in await budget.applicable_budgets(db, workspace_id, project_id=project_id, task=task.value):
+        check = budget.check_usage(await budget.budget_usage(db, b), cost=total, operations=items)
+        checks.append(BudgetCheckOut(
+            budget_id=b.id, description=budget.describe_budget(b), limit_usd=b.limit_usd,
+            max_ai_operations=b.max_ai_operations, spent_usd=check.usage.spent_usd,
+            operations=check.usage.operations, would_exceed=check.would_exceed, reason=check.reason,
+        ))
+    return checks
+
+
 @dataclass(frozen=True)
 class AnalysisPlan:
     estimate: AnalysisEstimate
@@ -211,14 +226,7 @@ async def plan_thumbnail_analysis(
     per_item = token_cost(model, tokens_in, tokens_out) if model is not None else None
     total = per_item * items if per_item is not None else None
 
-    checks: list[BudgetCheckOut] = []
-    for b in await budget.applicable_budgets(db, workspace_id, project_id=project.id, task=task.value):
-        check = budget.check_usage(await budget.budget_usage(db, b), cost=total, operations=items)
-        checks.append(BudgetCheckOut(
-            budget_id=b.id, description=budget.describe_budget(b), limit_usd=b.limit_usd,
-            max_ai_operations=b.max_ai_operations, spent_usd=check.usage.spent_usd,
-            operations=check.usage.operations, would_exceed=check.would_exceed, reason=check.reason,
-        ))
+    checks = await budget_checks(db, workspace_id, project.id, task, total, items)
 
     token_payload: dict[str, Any] = {
         "project_id": project.id, "task": task.value, "assets": _ids_digest(todo),

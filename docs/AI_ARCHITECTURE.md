@@ -57,6 +57,11 @@
 - **Output schema `ChannelVisualAudit`:** `visual_consistency` 1–10, `repeated_template` bool, `outdated_style` 1–10, `has_design_system` bool, `better_performing_patterns[]` (только корреляция с просмотрами, помечено как наблюдение, не причинность), `recurring_problems[]` (коды), `weakest_video_ids[]`, `best_redesign_candidates[] {video_id, why}`, `visual_opportunity (low|medium|high)`, `summary`.
 - Агрегаты (avg/median/pct weak/medium/strong, best/worst) — **считаются в коде**, не AI.
 - **Prompt:** `channel_analysis/v1`. **Cache:** по набору image hashes + prompt version.
+  Реализация (3.6): видео в промпте нумеруются («Video N» = image N), модель возвращает номера
+  (`weakest_video_indexes`, `best_redesign_candidates[].video_index`), код переводит их в id и отбрасывает
+  несуществующие; `outdated_style` — выше = более устаревший. Ключ кэша — (канал, `inputs_digest`, версия промпта,
+  модель), digest включает и id аудитов превью: новый индивидуальный аудит ⇒ новый аудит канала. Агрегаты не хранятся —
+  считаются при чтении по весам workspace (как `overall_score`). Схема — `app/domains/analysis/channel_audit.py`.
 
 ## 4. Lead Scoring (§8, §52–53)
 - **Детерминированный** (без AI): компоненты по `scoring_profiles(kind=lead)`:

@@ -283,7 +283,7 @@ function NumberField({ id, label, value, onChange }: { id: string; label: string
   );
 }
 
-function AIProviderBadge({ provider, loading }: { provider: string | null; loading: boolean }) {
+export function AIProviderBadge({ provider, loading }: { provider: string | null; loading: boolean }) {
   if (loading) return null;
   if (provider === "mock") return <Badge tone="violet">AI: mock — демо-результаты</Badge>;
   if (provider === "openai") return <Badge tone="blue">AI: OpenAI</Badge>;

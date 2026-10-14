@@ -9,6 +9,7 @@ import procrastinate
 from app.core.config import get_settings
 from app.core.db import get_sessionmaker
 from app.core.logging import get_logger
+from app.domains.analysis.channel_pipeline import run_channel_analysis
 from app.domains.analysis.pipeline import run_thumbnail_analysis
 from app.domains.discovery.quota import CommittingQuota
 from app.domains.discovery.service import run_discovery
@@ -91,6 +92,27 @@ async def thumbnail_analysis(ctx: JobRunContext) -> dict[str, Any]:
 
     async def run(provider: AIProvider) -> dict[str, Any]:
         return await run_thumbnail_analysis(
+            sessions, provider, storage, settings, job_run_id=ctx.job_run_id, workspace_id=ctx.workspace_id,
+            params=ctx.params, progress=ctx.progress,
+        )
+
+    override: AIProvider | None = ctx.resources.get("ai_provider")
+    if override is not None:
+        return await run(override)
+    async with open_ai_provider(settings) as provider:
+        return await run(provider)
+
+
+@job_task(name=JobType.CHANNEL_ANALYSIS.value, queue=JobQueue.BULK)
+async def channel_analysis(ctx: JobRunContext) -> dict[str, Any]:
+    """params: ``{"project_id", "channel_ids", "videos_per_channel", "detail", "model_key"}`` — see
+    ``analysis.channel_pipeline.run_channel_analysis``. Started only with a confirmed estimate (§76)."""
+    settings = get_settings()
+    sessions = get_sessionmaker()
+    storage: StorageBackend = ctx.resources.get("storage") or LocalFSStorage(settings.storage_path)
+
+    async def run(provider: AIProvider) -> dict[str, Any]:
+        return await run_channel_analysis(
             sessions, provider, storage, settings, job_run_id=ctx.job_run_id, workspace_id=ctx.workspace_id,
             params=ctx.params, progress=ctx.progress,
         )

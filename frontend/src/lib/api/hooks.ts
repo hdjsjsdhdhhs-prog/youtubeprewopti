@@ -52,6 +52,21 @@ export type AnalysisQuery = {
   offset: number;
 };
 
+export type ChannelAnalysisRequest = Schemas["ChannelAnalysisRequest"];
+export type ChannelAnalysisEstimate = Schemas["ChannelAnalysisEstimate"];
+export type ChannelAnalysisStartRequest = Schemas["ChannelAnalysisStartRequest"];
+export type ChannelAnalysis = Schemas["ChannelAnalysisOut"];
+export type ChannelAggregates = Schemas["ChannelAggregates"];
+export type ChannelVisualReport = Schemas["ChannelVisualReport"];
+export type AnalyzedChannel = Schemas["AnalyzedChannelOut"];
+export type ChannelAnalysisQuery = {
+  sort?: Schemas["ChannelAnalysisSort"];
+  order?: SortOrder;
+  opportunity?: "low" | "medium" | "high";
+  problem?: Schemas["ProblemCode"];
+  offset: number;
+};
+
 export const ACTIVE_JOB_STATUSES: ReadonlySet<JobStatus> = new Set(["queued", "running", "retrying"]);
 
 /** Query keys: one tree per resource so mutations can invalidate a whole branch. */
@@ -75,6 +90,10 @@ export const qk = {
   thumbnailAnalyses: (id: number) => ["projects", "detail", id, "thumbnail-analyses"] as const,
   thumbnailAnalysisList: (id: number, q: AnalysisQuery) =>
     ["projects", "detail", id, "thumbnail-analyses", q] as const,
+  channelAnalyses: (id: number) => ["projects", "detail", id, "channel-analyses"] as const,
+  channelAnalysisList: (id: number, q: ChannelAnalysisQuery) =>
+    ["projects", "detail", id, "channel-analyses", q] as const,
+  channelVisualAudit: (id: number) => ["channels", "detail", id, "visual-audit"] as const,
   aiStatus: ["ai", "status"] as const,
 };
 
@@ -411,6 +430,54 @@ export function useThumbnailAnalyses(projectId: number, q: AnalysisQuery) {
         }),
       ),
     placeholderData: keepPreviousData,
+  });
+}
+
+/** Pre-flight estimate of the comparative AI channel audit (Phase 3.6). Nothing is charged. */
+export function useChannelAnalysisEstimate(projectId: number) {
+  return useMutation({
+    mutationFn: (body: ChannelAnalysisRequest) =>
+      unwrap(
+        api.POST("/api/projects/{project_id}/channel-analysis/estimate", {
+          params: { path: { project_id: projectId } },
+          body,
+        }),
+      ),
+  });
+}
+
+/** Start the channel audit of exactly the confirmed estimate (409 `confirmation_required` if it changed). */
+export function useStartChannelAnalysis(projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ChannelAnalysisStartRequest) =>
+      unwrap(
+        api.POST("/api/projects/{project_id}/channel-analysis", { params: { path: { project_id: projectId } }, body }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.jobs }),
+  });
+}
+
+export const CHANNEL_ANALYSES_PAGE = 24;
+
+export function useChannelAnalyses(projectId: number, q: ChannelAnalysisQuery) {
+  return useQuery({
+    queryKey: qk.channelAnalysisList(projectId, q),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/projects/{project_id}/channel-analyses", {
+          params: { path: { project_id: projectId }, query: { ...q, limit: CHANNEL_ANALYSES_PAGE } },
+        }),
+      ),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useChannelVisualAudit(channelId: number) {
+  return useQuery({
+    queryKey: qk.channelVisualAudit(channelId),
+    queryFn: () =>
+      unwrap(api.GET("/api/channels/{channel_id}/visual-audit", { params: { path: { channel_id: channelId } } })),
   });
 }
 

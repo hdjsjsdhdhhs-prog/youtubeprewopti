@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, status
 
 from app.api.deps import AppSettings, DbSession, Paging, ReadAuth, WriteAuth
-from app.domains.analysis import service
+from app.domains.analysis import channel_service, service
 from app.domains.analysis.audit import Level, ProblemCode
 from app.domains.analysis.schemas import (
     AnalysisEstimate,
@@ -14,6 +14,12 @@ from app.domains.analysis.schemas import (
     AnalysisSort,
     AnalysisStartRequest,
     AnalysisStartResult,
+    ChannelAnalysisEstimate,
+    ChannelAnalysisList,
+    ChannelAnalysisRequest,
+    ChannelAnalysisSort,
+    ChannelAnalysisStartRequest,
+    ChannelVisualReport,
     PrefilterPreview,
     ThumbnailAnalysisList,
     ThumbnailPrefilter,
@@ -21,6 +27,7 @@ from app.domains.analysis.schemas import (
 from app.domains.youtube.schemas import SortOrder
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["analysis"])
+channel_router = APIRouter(prefix="/channels", tags=["analysis"])
 
 
 @router.post("/prefilter/preview", response_model=PrefilterPreview)
@@ -53,6 +60,54 @@ async def start_thumbnail_analysis(
     return await service.start_thumbnail_analysis(
         db, settings, ctx.workspace.id, ctx.user.id, project_id, body
     )
+
+
+@router.post("/channel-analysis/estimate", response_model=ChannelAnalysisEstimate)
+async def estimate_channel_analysis(
+    project_id: int, body: ChannelAnalysisRequest, ctx: ReadAuth, db: DbSession, settings: AppSettings
+) -> ChannelAnalysisEstimate:
+    """Pre-flight estimate of the comparative AI audit of the project's channels (§17, §76). A channel
+    needs at least 3 audited thumbnails; channels whose exact inputs are already audited are free."""
+    return await channel_service.estimate_channel_analysis(db, settings, ctx.workspace.id, project_id, body)
+
+
+@router.post(
+    "/channel-analysis", response_model=AnalysisStartResult, status_code=status.HTTP_202_ACCEPTED
+)
+async def start_channel_analysis(
+    project_id: int, body: ChannelAnalysisStartRequest, ctx: WriteAuth, db: DbSession, settings: AppSettings
+) -> AnalysisStartResult:
+    """Queue the channel audit of the estimate whose ``confirm_token`` is echoed (changed => 409
+    ``confirmation_required`` with the new token, nothing starts)."""
+    return await channel_service.start_channel_analysis(
+        db, settings, ctx.workspace.id, ctx.user.id, project_id, body
+    )
+
+
+@router.get("/channel-analyses", response_model=ChannelAnalysisList)
+async def list_channel_analyses(
+    project_id: int,
+    ctx: ReadAuth,
+    db: DbSession,
+    page: Paging,
+    sort: ChannelAnalysisSort = ChannelAnalysisSort.AVG_SCORE,
+    order: SortOrder = SortOrder.ASC,
+    opportunity: Level | None = None,
+    problem: ProblemCode | None = None,
+) -> ChannelAnalysisList:
+    """Channels of the project with a current channel audit; aggregates use the workspace's thumbnail
+    weights. Default order: lowest average thumbnail quality first."""
+    return await channel_service.list_channel_analyses(
+        db, ctx.workspace.id, project_id, sort=sort, order=order, opportunity=opportunity, problem=problem,
+        limit=page.limit, offset=page.offset,
+    )
+
+
+@channel_router.get("/{channel_id}/visual-audit", response_model=ChannelVisualReport)
+async def get_channel_visual_audit(channel_id: int, ctx: ReadAuth, db: DbSession) -> ChannelVisualReport:
+    """Current comparative audit of the channel with code-computed aggregates (``analysis: null`` = not
+    audited yet)."""
+    return await channel_service.channel_visual_report(db, ctx.workspace.id, channel_id)
 
 
 @router.get("/thumbnail-analyses", response_model=ThumbnailAnalysisList)
