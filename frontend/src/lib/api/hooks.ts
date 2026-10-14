@@ -8,6 +8,8 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 
+import type { LeadQuery } from "@/lib/leads";
+
 import { api, unwrap, type Schemas } from "./client";
 
 export type Me = Schemas["MeResponse"];
@@ -67,6 +69,17 @@ export type ChannelAnalysisQuery = {
   offset: number;
 };
 
+export type Lead = Schemas["LeadOut"];
+export type LeadDetail = Schemas["LeadDetail"];
+export type LeadList = Schemas["LeadList"];
+export type LeadScore = Schemas["LeadScoreOut"];
+export type ScoreComponent = Schemas["ScoreComponentOut"];
+export type LeadWeights = Schemas["LeadWeights"];
+export type PriorityWeights = Schemas["PriorityWeights"];
+export type IdealLeadProfile = Schemas["IdealLeadProfileOut"];
+export type IdealLeadCriteria = Schemas["IdealLeadCriteria"];
+export type RescoreResult = Schemas["RescoreResult"];
+
 export const ACTIVE_JOB_STATUSES: ReadonlySet<JobStatus> = new Set(["queued", "running", "retrying"]);
 
 /** Query keys: one tree per resource so mutations can invalidate a whole branch. */
@@ -95,6 +108,12 @@ export const qk = {
     ["projects", "detail", id, "channel-analyses", q] as const,
   channelVisualAudit: (id: number) => ["channels", "detail", id, "visual-audit"] as const,
   aiStatus: ["ai", "status"] as const,
+  leads: ["leads"] as const,
+  leadList: (q: LeadQuery) => ["leads", "list", q] as const,
+  lead: (id: number) => ["leads", "detail", id] as const,
+  leadProfile: ["scoring", "lead"] as const,
+  priorityProfile: ["scoring", "priority"] as const,
+  idealProfiles: ["ideal-lead-profiles"] as const,
 };
 
 // --- auth -------------------------------------------------------------------------------------
@@ -483,6 +502,94 @@ export function useChannelVisualAudit(channelId: number) {
 
 export function useAIStatus() {
   return useQuery({ queryKey: qk.aiStatus, queryFn: () => unwrap(api.GET("/api/ai/status")), staleTime: 60_000 });
+}
+
+// --- leads (Phase 3.7) --------------------------------------------------------------------------
+
+export const LEADS_PAGE = 50;
+
+export function useLeads(q: LeadQuery, enabled = true) {
+  return useQuery({
+    queryKey: qk.leadList(q),
+    queryFn: () => unwrap(api.GET("/api/leads", { params: { query: { ...q, limit: LEADS_PAGE } } })),
+    placeholderData: keepPreviousData,
+    enabled,
+  });
+}
+
+export function useLead(id: number) {
+  return useQuery({
+    queryKey: qk.lead(id),
+    queryFn: () => unwrap(api.GET("/api/leads/{lead_id}", { params: { path: { lead_id: id } } })),
+  });
+}
+
+/** Everything a rescore can change: lists, cards and the weight profiles shown with them. */
+function invalidateLeads(qc: ReturnType<typeof useQueryClient>) {
+  return qc.invalidateQueries({ queryKey: qk.leads });
+}
+
+/** Create missing leads, advance DISCOVERED → ANALYZED and recompute scores (deterministic, free). */
+export function useSyncLeads() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (project_id?: number) => unwrap(api.POST("/api/leads/sync", { body: { project_id } })),
+    onSuccess: () => invalidateLeads(qc),
+  });
+}
+
+export function useLeadProfile() {
+  return useQuery({ queryKey: qk.leadProfile, queryFn: () => unwrap(api.GET("/api/scoring-profiles/lead")) });
+}
+
+export function useSetLeadProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: LeadWeights) => unwrap(api.PUT("/api/scoring-profiles/lead", { body })),
+    onSuccess: (saved) => {
+      qc.setQueryData(qk.leadProfile, saved);
+      return invalidateLeads(qc);
+    },
+  });
+}
+
+export function usePriorityProfile() {
+  return useQuery({ queryKey: qk.priorityProfile, queryFn: () => unwrap(api.GET("/api/scoring-profiles/priority")) });
+}
+
+export function useSetPriorityProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PriorityWeights) => unwrap(api.PUT("/api/scoring-profiles/priority", { body })),
+    onSuccess: (saved) => {
+      qc.setQueryData(qk.priorityProfile, saved);
+      return invalidateLeads(qc);
+    },
+  });
+}
+
+export function useIdealProfiles() {
+  return useQuery({ queryKey: qk.idealProfiles, queryFn: () => unwrap(api.GET("/api/ideal-lead-profiles")) });
+}
+
+export function useSaveIdealProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id?: number; body: Schemas["IdealLeadProfileIn"] }) =>
+      id === undefined
+        ? unwrap(api.POST("/api/ideal-lead-profiles", { body }))
+        : unwrap(api.PATCH("/api/ideal-lead-profiles/{profile_id}", { params: { path: { profile_id: id } }, body })),
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: qk.idealProfiles }), invalidateLeads(qc)]),
+  });
+}
+
+export function useDeleteIdealProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      unwrap(api.DELETE("/api/ideal-lead-profiles/{profile_id}", { params: { path: { profile_id: id } } })),
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: qk.idealProfiles }), invalidateLeads(qc)]),
+  });
 }
 
 // --- jobs -------------------------------------------------------------------------------------

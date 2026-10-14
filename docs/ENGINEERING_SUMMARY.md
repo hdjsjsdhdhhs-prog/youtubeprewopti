@@ -1,6 +1,6 @@
 # ENGINEERING SUMMARY
 
-_Обновлено: 2026-10-14 — Phase 1, 2, 3.1–3.5 закоммичены (`f0c76ef`), 3.6 (аудит канала) реализована, не закоммичена; следующая — 3.7.
+_Обновлено: 2026-10-14 — Phase 1, 2, 3.1–3.6 закоммичены (`55c4bc8`), 3.7 (лиды и Lead Score) реализована, не закоммичена.
 Архитектурное исследование — 2026-09-24._
 
 **PROJECT:**
@@ -210,12 +210,29 @@ vibecode для `thumbnail_analysis/v1` — **не проверены** (раз�
   403 → запуск 202 → воркер 6/6 → список (сортировка по среднему), отчёт канала, картинки, повторная оценка $0,
   другой `videos_per_channel` — новые входы; страницы проекта, канала и задач — 200 (18 проверок).
 - **Не проверено:** реальные вызовы vibecode для `channel_analysis/v1`; отрисовка UI в браузере (Playwright на машине
-  не установлен — проверены только SSR-ответы страниц и render-тесты в jsdom); CI для этих изменений (не закоммичены).
+  не установлен — проверены только SSR-ответы страниц и render-тесты в jsdom); CI для этих изменений (закоммичены в
+  `55c4bc8`, CI не запускался).
 
-**СЛЕДУЮЩЕЕ — 3.7:** `leads`, `lead_scores`, `lead_status_history`, `ideal_lead_profiles`, профили `lead`/`priority`
-в `scoring_profiles`, детерминированный объяснимый Lead Score (компоненты «баллы/максимум» + причина),
-автосоздание лидов (`DISCOVERED`/`ANALYZED`), Contactability — вес 0 до Phase 6, UI лидов с фильтрами (§9) и
-редактором весов.
+**PHASE 3.7 — ЛИДЫ И LEAD SCORE (2026-10-14):** ТЗ §9, §52–53, AI_ARCHITECTURE §4.
+- Домен `app/domains/leads/` (миграция `5c2d8e4f7a13`): `leads`, `lead_scores`, `lead_status_history`,
+  `ideal_lead_profiles`; профили весов `lead` / `priority` в `scoring_profiles`. Отклонения от проекта схемы — в
+  DATABASE.md и ARCHITECTURE_CHANGELOG (priority_score в `lead_scores`, компонент `views`, `data_coverage`, профиль
+  идеального лида — один `is_default` на workspace).
+- Lead Score без AI (`scoring.py`): 8 компонентов, каждый — доля 0–1 + причина; нет данных → 0 баллов; итог
+  нормируется к 0–100; Priority Score — те же доли с другими весами. Contactability — «нет данных», вес 0 до Phase 6.
+- Лиды создаются автоматически (`DISCOVERED`, при аудите превью → `ANALYZED`) после discovery / аудита превью / аудита
+  канала (`result.leads`), пересчёт — также при смене весов (в т. ч. весов превью), профиля идеального лида и по
+  `POST /api/leads/sync`; новая строка `lead_scores` — только при изменении результата.
+- API: `GET /api/leads` (фильтры §9, сортировки), `GET /api/leads/{id}`, `POST /api/leads/sync`,
+  `GET/PUT /api/scoring-profiles/{lead,priority}`, CRUD `/api/ideal-lead-profiles`.
+- Frontend: страница лидов с фильтрами и редактором весов, блок лида на карточке канала, компонент `lead-score`.
+- Проверки (2026-10-14): backend `pytest` **302 passed / 1 skipped** (+24), `ruff check app tests`, `mypy app`
+  (107 файлов), `alembic check` на `ytlead` — без расхождений (миграция применена); frontend `npm run lint`
+  (0 ошибок, прежнее предупреждение `useVirtualizer`), `npm run typecheck`, `npm test` — 52 (+9).
+  `ruff format --check` по всему backend не проходит (68 файлов, в основном код до 3.7 — не трогали); новые файлы
+  домена `leads` отформатированы.
+- **Не проверено:** `next build`, сквозной прогон реальными процессами (uvicorn + воркер + `next start`), отрисовка UI в
+  браузере, CI. `lead_explanation/v1` (AI-резюме лида) не реализован.
 
 **VERIFICATION STATUS (этап архитектуры):**
 - Verified: версии пакетов (PyPI/npm), Procrastinate на Windows + PG16 (spike), квоты YouTube (официальная документация), модели gpt-image-2.5-flare/sunburst и линейка GPT-6 (документация OpenAI).

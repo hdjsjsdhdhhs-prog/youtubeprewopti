@@ -27,7 +27,7 @@ REST API на FastAPI. Базовый префикс — `/api`. Машиноч�
 | `read` | viewer | все `GET` |
 | `write` | operator | создание/изменение/удаление проектов и запросов, постановка и отмена задач |
 | `outreach_send` | operator | одобрение/отправка (следующие фазы) |
-| `manage_integrations` | admin | реестр AI-моделей (`PATCH /api/ai/models/*`), бюджеты (`POST/PATCH/DELETE /api/budgets`); в таблице ниже — «admin» |
+| `manage_integrations` | admin | реестр AI-моделей (`PATCH /api/ai/models/*`), бюджеты (`POST/PATCH/DELETE /api/budgets`), веса баллов (`PUT /api/scoring-profiles/*`); в таблице ниже — «admin» |
 | `manage_members` | admin | следующие фазы |
 
 Порядок ролей: `viewer < operator < admin < owner`. Недостаточно прав → `403 forbidden`.
@@ -100,6 +100,17 @@ REST API на FastAPI. Базовый префикс — `/api`. Машиноч�
 | `POST /api/projects/{id}/channel-analysis` | write | 202 `AnalysisStartResult` | Запуск аудита каналов подтверждённой оценки |
 | `GET /api/projects/{id}/channel-analyses` | read | 200 `ChannelAnalysisList` | Каналы проекта с аудитом: оценки AI + агрегаты кодом |
 | `GET /api/channels/{id}/visual-audit` | read | 200 `ChannelVisualReport` | Текущий аудит канала, агрегаты, сравнённые превью |
+| `GET /api/leads` | read | 200 `LeadList` | Лиды workspace с Lead Score, фильтры ТЗ §9 (Phase 3.7) |
+| `GET /api/leads/{id}` | read | 200 `LeadDetail` | Лид: разбор балла по компонентам, история статусов и баллов |
+| `POST /api/leads/sync` | write | 200 `RescoreResult` | Создать недостающие лиды и пересчитать баллы (без AI) |
+| `GET /api/scoring-profiles/lead` | read | 200 `LeadProfileOut` | Максимумы компонентов Lead Score и ценность ниш |
+| `PUT /api/scoring-profiles/lead` | admin | 200 `LeadProfileSaved` | Новая версия весов Lead Score + пересчёт лидов |
+| `GET /api/scoring-profiles/priority` | read | 200 `PriorityProfileOut` | Веса Priority Score (§53) |
+| `PUT /api/scoring-profiles/priority` | admin | 200 `PriorityProfileSaved` | Новая версия весов Priority Score + пересчёт лидов |
+| `GET /api/ideal-lead-profiles` | read | 200 `IdealLeadProfileOut[]` | Профили идеального лида (§52) |
+| `POST /api/ideal-lead-profiles` | write | 201 `IdealLeadProfileSaved` | Создать профиль (+ пересчёт, если он по умолчанию) |
+| `PATCH /api/ideal-lead-profiles/{id}` | write | 200 `IdealLeadProfileSaved` | Изменить имя / критерии / `is_default` + пересчёт |
+| `DELETE /api/ideal-lead-profiles/{id}` | write | 200 `RescoreResult` | Удалить профиль + пересчёт |
 | `GET /api/ai/status` | read | 200 `AIStatusOut` | Активный AI-провайдер и реестр моделей |
 | `PATCH /api/ai/models/{key}` | admin | 200 `AIModelOut` | API ID модели, цены за 1M токенов, вкл/выкл |
 | `GET /api/ai/usage` | read | 200 `AIUsageOut` | Расход AI за сутки / месяц / всё время + бюджеты |
@@ -347,6 +358,66 @@ ai_not_configured`; `409 project_archived`. Задача `channel_analysis` (о�
 `aggregates` **считает код**, а не AI: по текущим аудитам превью сравнённых видео с весами активного профиля workspace
 (как `overall_score`) — `thumbnails_analyzed`, `avg_score`, `median_score`, `pct_weak` (< 5), `pct_medium`,
 `pct_strong` (≥ 7), `best_video_id`, `worst_video_id`. Смена весов сразу меняет агрегаты без повторного аудита.
+
+### Лиды и Lead Score (Phase 3.7, ТЗ §9, §52–53)
+
+Лид — канал в рамках workspace (один на канал, `UNIQUE(workspace_id, channel_id)`). Лиды создаются автоматически
+(`DISCOVERED`) для каждого канала проектов workspace после discovery, аудита превью и аудита канала; при хотя бы
+одном текущем аудите превью — `DISCOVERED → ANALYZED`. Итог пересчёта — в `result.leads` этих задач. Балл
+детерминированный, без AI и бесплатный; формулы — [AI_ARCHITECTURE.md §4](AI_ARCHITECTURE.md).
+
+`GET /api/leads` параметры (все необязательны, объединяются по И):
+
+| Группа | Параметры |
+|---|---|
+| Область | `project_id`, `channel_id`, `status` (можно повторять, значения ADR-0011), `q` (название/handle/ID канала, ≤ 200) |
+| Баллы | `min_lead_score`, `max_lead_score`, `min_priority` (0–100), `min_thumbnail_score`, `max_thumbnail_score` (1–10, средний балл аудированных превью) |
+| Канал | `min_subscribers`, `max_subscribers`, `min_avg_views`, `max_days_since_last_upload`, `activity` (`low\|medium\|high` — не ниже этого уровня: high — последнее видео ≤ 14 дн. и ≥ 4 видео за 30 дн., medium — ≤ 30 дн.) |
+| AI | `visual_opportunity` (`low\|medium\|high`, из текущего аудита канала) |
+| Ниши | `niche` — можно повторять; узел включает вложенные темы |
+
+Фильтры по баллам исключают лиды без балла / без аудированных превью, фильтры по каналу — каналы без метрик.
+`sort` = `lead_score` (по умолчанию) \| `priority` \| `thumbnail_score` \| `thumbnail_opportunity` \|
+`visual_opportunity` \| `views` \| `subscribers` \| `activity` \| `contactability` \| `last_video` \| `created`,
+`order` = `desc` (по умолчанию) \| `asc`; `limit`/`offset`.
+Ответ: `items[]` (`LeadOut`: `id`, `status`, `status_changed_at`, `created_from_project_id`, `channel` (`ChannelOut`),
+`activity_level`, `visual_opportunity`, `score` — `null`, если ещё не посчитан), `total` (после фильтров), `summary`
+(`leads`, `scored`, `by_status`, `avg_lead_score` — без фильтров, в рамках `project_id`), `lead_profile`,
+`priority_profile`.
+
+`LeadScoreOut`: `total` (Lead Score 0–100), `priority_score`, `data_coverage` (% максимума, по которому есть данные),
+`avg_thumbnail_score`, баллы восьми компонентов (`thumbnail_opportunity`, `channel_fit`, `audience`, `views`,
+`activity`, `growth`, `contactability`, `niche_value`), версии профилей весов (0 — встроенные),
+`ideal_lead_profile_id` и `components[]` — объяснение каждого компонента: `key`, `label`, `points` из `max`,
+`fraction` (0–1, `null` — нет данных → 0 баллов), `has_data`, `reason`, `inputs`, `priority_weight`. Contactability
+до Phase 6 — «нет данных» с весом 0.
+
+`GET /api/leads/{id}` → `LeadDetail` = `LeadOut` + `history[]` (смены статуса, новые первыми; `actor_user_id=null` —
+автоматически, `from_status=null` — создание), `score_history[]` (до 20 расчётов, текущий включён: `total`,
+`priority_score`, `data_coverage`, `created_at`), `ideal_lead_profile` (по которому посчитан текущий балл). Лид
+чужого workspace — 404.
+
+`POST /api/leads/sync` `{"project_id"?: int}` (write; без `project_id` — все проекты workspace) → `RescoreResult`
+`{"leads_created", "leads_analyzed", "scores_changed", "scores_unchanged"}`. Новая строка `lead_scores` пишется,
+только если результат изменился; прежняя остаётся историей.
+
+Веса: `GET/PUT /api/scoring-profiles/lead` — `LeadWeights`: максимум баллов каждого компонента (0–100, хотя бы один
+> 0; Lead Score нормируется к 0–100 при любой сумме; по умолчанию 25 / 20 / 15 / 10 / 15 / 5 / 0 / 10 в порядке
+полей выше) и `niche_values` `{taxonomy_node_id: 0..10}` (≤ 500; канал берёт лучшую оценку своих ниш, тема без своей
+оценки наследует оценку ниши). `GET/PUT /api/scoring-profiles/priority` — `PriorityWeights` над теми же
+компонентами (по умолчанию 30 / 20 / 0 / 20 / 20 / 0 / 0 / 10). `PUT` (admin) сохраняет новую версию и пересчитывает
+все лиды workspace; ответ содержит `rescored: RescoreResult`. `PUT /api/scoring-profiles/thumbnail` тоже
+пересчитывает лиды (Thumbnail Opportunity зависит от весов превью).
+
+Профили идеального лида (§52): `IdealLeadProfileIn` `{"name" (1–200, уникально в workspace → иначе `409
+name_taken`), "criteria", "is_default": true}`. `criteria` (`IdealLeadCriteria`, лишние поля → 422):
+`min_subscribers`, `max_subscribers` (min ≤ max), `min_avg_views`, `min_activity`, `max_days_since_last_upload`,
+`max_thumbnail_score` (1–10, по среднему аудированных превью), `niches[]` (любая из, с вложенными), `countries[]`,
+`languages[]`, `contact_types[]` (`email`/`telegram`, учитывается с Phase 6). Channel Fit = доля заданных критериев,
+которым канал соответствует (незаданный критерий не учитывается, заданный без данных — не выполнен); используется
+профиль `is_default` workspace (не больше одного; нет профиля — Channel Fit «нет данных»). `PATCH` — частичное
+изменение (`is_default: false` — не использовать ни один). Создание, изменение и удаление пересчитывают лиды
+(`rescored` / `RescoreResult`).
 
 ### AI: реестр моделей, расходы и бюджеты (Phase 3.3–3.4)
 

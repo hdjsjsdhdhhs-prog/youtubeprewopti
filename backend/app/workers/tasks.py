@@ -15,6 +15,7 @@ from app.domains.discovery.quota import CommittingQuota
 from app.domains.discovery.service import run_discovery
 from app.domains.jobs import service as jobs
 from app.domains.jobs.service import JobQueue, JobType
+from app.domains.leads.service import sync_project_leads
 from app.domains.media.service import DownloadOutcome, MetricsOutcome, ingest_thumbnail
 from app.providers.ai import AIProvider, open_ai_provider
 from app.providers.storage import LocalFSStorage, StorageBackend
@@ -25,6 +26,22 @@ from app.workers.registry import JobRunContext, job_task
 
 log = get_logger("app.workers")
 MAX_REPORTED_FAILURES = 50
+
+
+async def _sync_leads(ctx: JobRunContext, result: dict[str, Any]) -> dict[str, Any]:
+    """After a project job: create / advance / rescore the project's leads (deterministic, 3.7). Its own
+    transaction: a failure here is reported in the result and does not undo the job's work."""
+    project_id = ctx.params.get("project_id")
+    try:
+        async with get_sessionmaker()() as db:
+            leads = await sync_project_leads(
+                db, ctx.workspace_id, int(project_id) if project_id is not None else None
+            )
+            await db.commit()
+    except Exception as exc:  # noqa: BLE001 — reported, the job's own result stands
+        log.exception("leads.sync_failed", job_run_id=ctx.job_run_id)
+        leads = {"error": f"{type(exc).__name__}: {exc}"}
+    return {**result, "leads": leads}
 
 
 @job_task(name=JobType.THUMBNAIL_DOWNLOAD.value, queue=JobQueue.BULK)
@@ -77,9 +94,10 @@ async def discovery(ctx: JobRunContext) -> dict[str, Any]:
 
     override: YouTubeProvider | None = ctx.resources.get("youtube_provider")
     if override is not None:
-        return await run(override)
+        return await _sync_leads(ctx, await run(override))
     async with open_youtube_provider(settings) as provider:
-        return await run(provider)
+        result = await run(provider)
+    return await _sync_leads(ctx, result)
 
 
 @job_task(name=JobType.THUMBNAIL_ANALYSIS.value, queue=JobQueue.BULK)
@@ -91,10 +109,11 @@ async def thumbnail_analysis(ctx: JobRunContext) -> dict[str, Any]:
     storage: StorageBackend = ctx.resources.get("storage") or LocalFSStorage(settings.storage_path)
 
     async def run(provider: AIProvider) -> dict[str, Any]:
-        return await run_thumbnail_analysis(
+        result = await run_thumbnail_analysis(
             sessions, provider, storage, settings, job_run_id=ctx.job_run_id, workspace_id=ctx.workspace_id,
             params=ctx.params, progress=ctx.progress,
         )
+        return await _sync_leads(ctx, result)
 
     override: AIProvider | None = ctx.resources.get("ai_provider")
     if override is not None:
@@ -112,10 +131,11 @@ async def channel_analysis(ctx: JobRunContext) -> dict[str, Any]:
     storage: StorageBackend = ctx.resources.get("storage") or LocalFSStorage(settings.storage_path)
 
     async def run(provider: AIProvider) -> dict[str, Any]:
-        return await run_channel_analysis(
+        result = await run_channel_analysis(
             sessions, provider, storage, settings, job_run_id=ctx.job_run_id, workspace_id=ctx.workspace_id,
             params=ctx.params, progress=ctx.progress,
         )
+        return await _sync_leads(ctx, result)
 
     override: AIProvider | None = ctx.resources.get("ai_provider")
     if override is not None:

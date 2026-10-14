@@ -14,6 +14,7 @@ from app.domains.identity.models import (
     WorkspaceMember,
 )
 from app.domains.jobs.models import JobRun
+from app.domains.leads.models import IdealLeadProfile, Lead, LeadScore, LeadStatusHistory
 from app.domains.media.models import ImageAsset, ImageMetrics, Thumbnail
 from app.domains.projects.models import (
     ChannelDiscovery,
@@ -34,7 +35,8 @@ from app.domains.youtube.models import (
 __all__ = [
     "AICall", "AIModel", "AuditLog", "Base", "Budget", "Channel", "ChannelAnalysis", "ChannelDiscovery",
     "ChannelMetrics",
-    "ChannelStatsSnapshot", "IdempotencyKey", "ImageAsset", "ImageMetrics", "JobRun", "ProjectChannel",
+    "ChannelStatsSnapshot", "IdealLeadProfile", "IdempotencyKey", "ImageAsset", "ImageMetrics", "JobRun",
+    "Lead", "LeadScore", "LeadStatusHistory", "ProjectChannel",
     "ProjectNiche", "PromptTemplate", "ScoringProfile", "SearchProject",
     "SearchQuery", "Secret", "TaxonomyNode", "Thumbnail", "ThumbnailAnalysis", "User", "UserSession", "Video",
     "VideoStatsSnapshot", "Workspace", "WorkspaceMember", "YouTubeQuotaLedger",

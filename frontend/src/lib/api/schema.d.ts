@@ -576,9 +576,116 @@ export interface paths {
         /**
          * Set Thumbnail Profile
          * @description Save new weights as the next version (previous versions are kept). Stored audits are not
-         *     re-run: ``overall_score`` is recomputed from their subscores on every read.
+         *     re-run: ``overall_score`` is recomputed from their subscores on every read. Lead scores (which use the
+         *     average thumbnail score) are recomputed.
          */
         put: operations["set_thumbnail_profile_api_scoring_profiles_thumbnail_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scoring-profiles/lead": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Lead Profile
+         * @description Lead Score: maximum points per component and the niche value table (version 0 = defaults).
+         */
+        get: operations["get_lead_profile_api_scoring_profiles_lead_get"];
+        /**
+         * Set Lead Profile
+         * @description Save as the next version and rescore all leads of the workspace (deterministic, no AI).
+         */
+        put: operations["set_lead_profile_api_scoring_profiles_lead_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scoring-profiles/priority": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Priority Profile
+         * @description Priority Score (§53) weights over the same components.
+         */
+        get: operations["get_priority_profile_api_scoring_profiles_priority_get"];
+        /** Set Priority Profile */
+        put: operations["set_priority_profile_api_scoring_profiles_priority_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Leads
+         * @description Leads of the workspace; all filters are optional and AND-ed (§9). ``activity`` = at least this level
+         *     (high: last video ≤ 14 days and ≥ 4 videos in 30 days; medium: last video ≤ 30 days). Default order:
+         *     highest Lead Score first.
+         */
+        get: operations["list_leads_api_leads_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leads/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync Leads
+         * @description Create leads for channels that have none, move DISCOVERED → ANALYZED when thumbnails are audited and
+         *     recompute the scores (deterministic, no AI, free). Runs automatically after discovery and analysis
+         *     jobs; this is the manual trigger.
+         */
+        post: operations["sync_leads_api_leads_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leads/{lead_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lead */
+        get: operations["get_lead_api_leads__lead_id__get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -760,6 +867,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ideal-lead-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Ideal Profiles */
+        get: operations["list_ideal_profiles_api_ideal_lead_profiles_get"];
+        put?: never;
+        /**
+         * Create Ideal Profile
+         * @description ``is_default`` (default true) makes it the profile Channel Fit uses; leads are rescored.
+         */
+        post: operations["create_ideal_profile_api_ideal_lead_profiles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ideal-lead-profiles/{profile_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Ideal Profile */
+        delete: operations["delete_ideal_profile_api_ideal_lead_profiles__profile_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Ideal Profile */
+        patch: operations["update_ideal_profile_api_ideal_lead_profiles__profile_id__patch"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -822,6 +968,11 @@ export interface components {
             /** Budgets */
             budgets: components["schemas"]["BudgetOut"][];
         };
+        /**
+         * ActivityLevel
+         * @enum {string}
+         */
+        ActivityLevel: "low" | "medium" | "high";
         /** AnalysisEstimate */
         AnalysisEstimate: {
             /** Task */
@@ -1511,6 +1662,93 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * IdealLeadCriteria
+         * @description What a perfect lead looks like; Channel Fit = share of the set criteria the channel meets. An
+         *     unset criterion is ignored; a set one without data (e.g. thumbnails not audited yet) counts as not met.
+         *     ``contact_types`` is evaluated once contacts exist (Phase 6) — until then it is ignored.
+         */
+        IdealLeadCriteria: {
+            /** Min Subscribers */
+            min_subscribers?: number | null;
+            /** Max Subscribers */
+            max_subscribers?: number | null;
+            /** Min Avg Views */
+            min_avg_views?: number | null;
+            min_activity?: components["schemas"]["ActivityLevel"] | null;
+            /** Max Days Since Last Upload */
+            max_days_since_last_upload?: number | null;
+            /** Max Thumbnail Score */
+            max_thumbnail_score?: number | null;
+            /** Niches */
+            niches?: number[];
+            /** Countries */
+            countries?: string[];
+            /** Languages */
+            languages?: string[];
+            /** Contact Types */
+            contact_types?: ("email" | "telegram")[];
+        };
+        /** IdealLeadProfileIn */
+        IdealLeadProfileIn: {
+            /** Name */
+            name: string;
+            criteria?: components["schemas"]["IdealLeadCriteria"];
+            /**
+             * Is Default
+             * @default true
+             */
+            is_default: boolean;
+        };
+        /** IdealLeadProfileOut */
+        IdealLeadProfileOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            criteria: components["schemas"]["IdealLeadCriteria"];
+            /** Is Default */
+            is_default: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** IdealLeadProfilePatch */
+        IdealLeadProfilePatch: {
+            /** Name */
+            name?: string | null;
+            criteria?: components["schemas"]["IdealLeadCriteria"] | null;
+            /** Is Default */
+            is_default?: boolean | null;
+        };
+        /** IdealLeadProfileSaved */
+        IdealLeadProfileSaved: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            criteria: components["schemas"]["IdealLeadCriteria"];
+            /** Is Default */
+            is_default: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            rescored: components["schemas"]["RescoreResult"];
+        };
+        /**
          * ImageMetricsOut
          * @description Deterministic metrics (no AI) — see ``app.domains.media.imaging`` for the exact formulas.
          */
@@ -1638,6 +1876,226 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "queued" | "running" | "completed" | "failed" | "retrying" | "cancelled";
+        /** LeadDetail */
+        LeadDetail: {
+            /** Id */
+            id: number;
+            status: components["schemas"]["LeadStatus"];
+            /**
+             * Status Changed At
+             * Format: date-time
+             */
+            status_changed_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created From Project Id */
+            created_from_project_id: number | null;
+            channel: components["schemas"]["ChannelOut"];
+            activity_level: components["schemas"]["ActivityLevel"] | null;
+            /** Visual Opportunity */
+            visual_opportunity: ("low" | "medium" | "high") | null;
+            score: components["schemas"]["LeadScoreOut"] | null;
+            /** History */
+            history: components["schemas"]["StatusChangeOut"][];
+            /** Score History */
+            score_history: components["schemas"]["LeadScoreHistoryItem"][];
+            ideal_lead_profile: components["schemas"]["IdealLeadProfileOut"] | null;
+        };
+        /** LeadList */
+        LeadList: {
+            /** Items */
+            items: components["schemas"]["LeadOut"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            summary: components["schemas"]["LeadSummary"];
+            lead_profile: components["schemas"]["LeadProfileOut"];
+            priority_profile: components["schemas"]["PriorityProfileOut"];
+        };
+        /** LeadOut */
+        LeadOut: {
+            /** Id */
+            id: number;
+            status: components["schemas"]["LeadStatus"];
+            /**
+             * Status Changed At
+             * Format: date-time
+             */
+            status_changed_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created From Project Id */
+            created_from_project_id: number | null;
+            channel: components["schemas"]["ChannelOut"];
+            activity_level: components["schemas"]["ActivityLevel"] | null;
+            /** Visual Opportunity */
+            visual_opportunity: ("low" | "medium" | "high") | null;
+            score: components["schemas"]["LeadScoreOut"] | null;
+        };
+        /** LeadProfileOut */
+        LeadProfileOut: {
+            kind: components["schemas"]["ScoringKind"];
+            /** Version */
+            version: number;
+            /** Is Default */
+            is_default: boolean;
+            weights: components["schemas"]["LeadWeights"];
+        };
+        /** LeadProfileSaved */
+        LeadProfileSaved: {
+            kind: components["schemas"]["ScoringKind"];
+            /** Version */
+            version: number;
+            /** Is Default */
+            is_default: boolean;
+            weights: components["schemas"]["LeadWeights"];
+            rescored: components["schemas"]["RescoreResult"];
+        };
+        /** LeadScoreHistoryItem */
+        LeadScoreHistoryItem: {
+            /** Total */
+            total: string;
+            /** Priority Score */
+            priority_score: string;
+            /** Data Coverage */
+            data_coverage: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** LeadScoreOut */
+        LeadScoreOut: {
+            /** Total */
+            total: string;
+            /** Priority Score */
+            priority_score: string;
+            /** Data Coverage */
+            data_coverage: string;
+            /** Avg Thumbnail Score */
+            avg_thumbnail_score: string | null;
+            /** Thumbnail Opportunity */
+            thumbnail_opportunity: string;
+            /** Channel Fit */
+            channel_fit: string;
+            /** Audience */
+            audience: string;
+            /** Views */
+            views: string;
+            /** Activity */
+            activity: string;
+            /** Growth */
+            growth: string;
+            /** Contactability */
+            contactability: string;
+            /** Niche Value */
+            niche_value: string;
+            /** Lead Profile Version */
+            lead_profile_version: number;
+            /** Priority Profile Version */
+            priority_profile_version: number;
+            /** Thumbnail Profile Version */
+            thumbnail_profile_version: number;
+            /** Ideal Lead Profile Id */
+            ideal_lead_profile_id: number | null;
+            /** Components */
+            components: components["schemas"]["ScoreComponentOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * LeadSort
+         * @enum {string}
+         */
+        LeadSort: "lead_score" | "priority" | "thumbnail_score" | "thumbnail_opportunity" | "visual_opportunity" | "views" | "subscribers" | "activity" | "contactability" | "last_video" | "created";
+        /**
+         * LeadStatus
+         * @enum {string}
+         */
+        LeadStatus: "discovered" | "analyzed" | "shortlisted" | "selected" | "generation_pending" | "generated" | "offer_draft" | "pending_approval" | "approved" | "scheduled" | "sent" | "replied" | "declined" | "opted_out" | "failed" | "rejected";
+        /** LeadSummary */
+        LeadSummary: {
+            /** Leads */
+            leads: number;
+            /** Scored */
+            scored: number;
+            /** By Status */
+            by_status: {
+                [key: string]: number;
+            };
+            /** Avg Lead Score */
+            avg_lead_score: string | null;
+        };
+        /** LeadSyncRequest */
+        LeadSyncRequest: {
+            /** Project Id */
+            project_id?: number | null;
+        };
+        /**
+         * LeadWeights
+         * @description Lead Score: maximum points per component (the score is normalised to 0–100 whatever their sum) and
+         *     the niche value table (taxonomy node id → 0–10; a channel takes the best value of its niches, a
+         *     topic without its own value inherits its niche's).
+         */
+        LeadWeights: {
+            /**
+             * Thumbnail Opportunity
+             * @default 25
+             */
+            thumbnail_opportunity: number;
+            /**
+             * Channel Fit
+             * @default 20
+             */
+            channel_fit: number;
+            /**
+             * Audience
+             * @default 15
+             */
+            audience: number;
+            /**
+             * Views
+             * @default 10
+             */
+            views: number;
+            /**
+             * Activity
+             * @default 15
+             */
+            activity: number;
+            /**
+             * Growth
+             * @default 5
+             */
+            growth: number;
+            /**
+             * Contactability
+             * @default 0
+             */
+            contactability: number;
+            /**
+             * Niche Value
+             * @default 10
+             */
+            niche_value: number;
+            /** Niche Values */
+            niche_values?: {
+                [key: string]: number;
+            };
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Email */
@@ -1760,6 +2218,71 @@ export interface components {
             thumbnails_selected: number;
             /** Sample Video Ids */
             sample_video_ids: number[];
+        };
+        /** PriorityProfileOut */
+        PriorityProfileOut: {
+            kind: components["schemas"]["ScoringKind"];
+            /** Version */
+            version: number;
+            /** Is Default */
+            is_default: boolean;
+            weights: components["schemas"]["PriorityWeights"];
+        };
+        /** PriorityProfileSaved */
+        PriorityProfileSaved: {
+            kind: components["schemas"]["ScoringKind"];
+            /** Version */
+            version: number;
+            /** Is Default */
+            is_default: boolean;
+            weights: components["schemas"]["PriorityWeights"];
+            rescored: components["schemas"]["RescoreResult"];
+        };
+        /**
+         * PriorityWeights
+         * @description Priority Score (§53): relative weights over the same components.
+         */
+        PriorityWeights: {
+            /**
+             * Thumbnail Opportunity
+             * @default 30
+             */
+            thumbnail_opportunity: number;
+            /**
+             * Channel Fit
+             * @default 20
+             */
+            channel_fit: number;
+            /**
+             * Audience
+             * @default 0
+             */
+            audience: number;
+            /**
+             * Views
+             * @default 20
+             */
+            views: number;
+            /**
+             * Activity
+             * @default 20
+             */
+            activity: number;
+            /**
+             * Growth
+             * @default 0
+             */
+            growth: number;
+            /**
+             * Contactability
+             * @default 0
+             */
+            contactability: number;
+            /**
+             * Niche Value
+             * @default 10
+             */
+            niche_value: number;
         };
         /**
          * ProblemCode
@@ -1991,6 +2514,40 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** RescoreResult */
+        RescoreResult: {
+            /** Leads Created */
+            leads_created: number;
+            /** Leads Analyzed */
+            leads_analyzed: number;
+            /** Scores Changed */
+            scores_changed: number;
+            /** Scores Unchanged */
+            scores_unchanged: number;
+        };
+        /** ScoreComponentOut */
+        ScoreComponentOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Points */
+            points: string;
+            /** Max */
+            max: string;
+            /** Fraction */
+            fraction: number | null;
+            /** Has Data */
+            has_data: boolean;
+            /** Reason */
+            reason: string;
+            /** Inputs */
+            inputs: {
+                [key: string]: unknown;
+            };
+            /** Priority Weight */
+            priority_weight: string;
+        };
         /**
          * ScoringKind
          * @enum {string}
@@ -2024,6 +2581,20 @@ export interface components {
             operations: number;
             /** Unpriced Operations */
             unpriced_operations: number;
+        };
+        /** StatusChangeOut */
+        StatusChangeOut: {
+            from_status: components["schemas"]["LeadStatus"] | null;
+            to_status: components["schemas"]["LeadStatus"];
+            /** Actor User Id */
+            actor_user_id: number | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /**
          * TaxonomyBulkImport
@@ -3533,6 +4104,226 @@ export interface operations {
             };
         };
     };
+    get_lead_profile_api_scoring_profiles_lead_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadProfileOut"];
+                };
+            };
+        };
+    };
+    set_lead_profile_api_scoring_profiles_lead_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeadWeights"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadProfileSaved"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_priority_profile_api_scoring_profiles_priority_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriorityProfileOut"];
+                };
+            };
+        };
+    };
+    set_priority_profile_api_scoring_profiles_priority_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriorityWeights"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriorityProfileSaved"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_leads_api_leads_get: {
+        parameters: {
+            query?: {
+                project_id?: number | null;
+                channel_id?: number | null;
+                status?: components["schemas"]["LeadStatus"][] | null;
+                q?: string | null;
+                min_thumbnail_score?: number | string | null;
+                max_thumbnail_score?: number | string | null;
+                min_lead_score?: number | string | null;
+                max_lead_score?: number | string | null;
+                min_priority?: number | string | null;
+                min_subscribers?: number | null;
+                max_subscribers?: number | null;
+                min_avg_views?: number | null;
+                activity?: components["schemas"]["ActivityLevel"] | null;
+                max_days_since_last_upload?: number | null;
+                visual_opportunity?: ("low" | "medium" | "high") | null;
+                niche?: number[] | null;
+                sort?: components["schemas"]["LeadSort"];
+                order?: components["schemas"]["SortOrder"];
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_leads_api_leads_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeadSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RescoreResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lead_api_leads__lead_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lead_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ai_status_api_ai_status_get: {
         parameters: {
             query?: never;
@@ -3841,6 +4632,125 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChannelVisualReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ideal_profiles_api_ideal_lead_profiles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdealLeadProfileOut"][];
+                };
+            };
+        };
+    };
+    create_ideal_profile_api_ideal_lead_profiles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdealLeadProfileIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdealLeadProfileSaved"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_ideal_profile_api_ideal_lead_profiles__profile_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RescoreResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_ideal_profile_api_ideal_lead_profiles__profile_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdealLeadProfilePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdealLeadProfileSaved"];
                 };
             };
             /** @description Validation Error */

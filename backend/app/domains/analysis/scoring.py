@@ -1,6 +1,7 @@
 """Scoring profiles: configurable weights of deterministic scores (ТЗ §7, AI_ARCHITECTURE §2).
 
-Only the thumbnail kind is used so far (3.5); lead/priority/contactability arrive with 3.7 and Phase 6.
+Kinds in use: thumbnail (3.5), lead and priority (3.7, ``app.domains.leads.service``); contactability —
+Phase 6. Every save adds a version and makes it the active one.
 """
 
 from __future__ import annotations
@@ -24,14 +25,52 @@ class ActiveWeights:
     weights: dict[str, float]
 
 
-async def active_thumbnail_weights(db: AsyncSession, workspace_id: int) -> ActiveWeights:
-    row = await db.scalar(
+async def active_profile(db: AsyncSession, workspace_id: int, kind: ScoringKind) -> ScoringProfile | None:
+    """The active saved profile of ``kind`` (None = the built-in defaults apply)."""
+    return await db.scalar(
         select(ScoringProfile).where(
             ScoringProfile.workspace_id == workspace_id,
-            ScoringProfile.kind == ScoringKind.THUMBNAIL,
+            ScoringProfile.kind == kind,
             ScoringProfile.is_active,
         )
     )
+
+
+async def save_profile_version(
+    db: AsyncSession, workspace_id: int, actor_id: int, kind: ScoringKind, weights: dict[str, Any],
+    before: dict[str, Any],
+) -> ScoringProfile:
+    """Store ``weights`` as the next version of ``kind`` and make it active (older versions are kept)."""
+    latest = await db.scalar(
+        select(func.max(ScoringProfile.version)).where(
+            ScoringProfile.workspace_id == workspace_id, ScoringProfile.kind == kind
+        )
+    ) or 0
+    await db.execute(
+        update(ScoringProfile)
+        .where(
+            ScoringProfile.workspace_id == workspace_id,
+            ScoringProfile.kind == kind,
+            ScoringProfile.is_active,
+        )
+        .values(is_active=False)
+    )
+    row = ScoringProfile(
+        workspace_id=workspace_id, kind=kind, version=latest + 1, weights=weights, is_active=True,
+        created_by=actor_id,
+    )
+    db.add(row)
+    await db.flush()
+    await audit(
+        db, "scoring_profile.updated", workspace_id=workspace_id, actor_user_id=actor_id,
+        entity_type="scoring_profile", entity_id=row.id,
+        diff={"kind": kind.value, "before": before, "after": weights, "version": row.version},
+    )
+    return row
+
+
+async def active_thumbnail_weights(db: AsyncSession, workspace_id: int) -> ActiveWeights:
+    row = await active_profile(db, workspace_id, ScoringKind.THUMBNAIL)
     if row is None:
         return ActiveWeights(version=0, weights=dict(DEFAULT_WEIGHTS))
     # stored weights are validated on write; keys added later fall back to their defaults
@@ -65,30 +104,7 @@ async def set_thumbnail_weights(
 ) -> ScoringProfileOut:
     """Save new weights as the next version and make it active (older versions are kept)."""
     before = await active_thumbnail_weights(db, workspace_id)
-    latest = await db.scalar(
-        select(func.max(ScoringProfile.version)).where(
-            ScoringProfile.workspace_id == workspace_id, ScoringProfile.kind == ScoringKind.THUMBNAIL
-        )
-    ) or 0
-    await db.execute(
-        update(ScoringProfile)
-        .where(
-            ScoringProfile.workspace_id == workspace_id,
-            ScoringProfile.kind == ScoringKind.THUMBNAIL,
-            ScoringProfile.is_active,
-        )
-        .values(is_active=False)
-    )
-    row = ScoringProfile(
-        workspace_id=workspace_id, kind=ScoringKind.THUMBNAIL, version=latest + 1,
-        weights=weights.model_dump(), is_active=True, created_by=actor_id,
-    )
-    db.add(row)
-    await db.flush()
-    await audit(
-        db, "scoring_profile.updated", workspace_id=workspace_id, actor_user_id=actor_id,
-        entity_type="scoring_profile", entity_id=row.id,
-        diff={"kind": "thumbnail", "before": before.weights, "after": weights.model_dump(),
-              "version": row.version},
+    row = await save_profile_version(
+        db, workspace_id, actor_id, ScoringKind.THUMBNAIL, weights.model_dump(), before.weights
     )
     return profile_out(ActiveWeights(version=row.version, weights=weights.model_dump()))

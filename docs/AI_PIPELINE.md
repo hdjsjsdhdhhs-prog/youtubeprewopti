@@ -1,12 +1,12 @@
 # AI PIPELINE
 
-_Реализация — Phase 3 (анализ: 3.1–3.6 готовы, 3.7 — lead scoring — дальше) и Phase 5 (генерация)._
+_Реализация — Phase 3 (анализ и lead scoring: 3.1–3.7 готовы) и Phase 5 (генерация)._
 
 Спецификация модулей, схем вывода и моделей — [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md), решения —
 [ADR-0007](decisions/ADR-0007-ai-provider-architecture.md). Этот документ описывает **поток данных**: какие
 задачи в каком порядке запускаются, что пишут в БД и где стоят проверки стоимости и человека.
 
-## Текущее состояние (Phase 3.1–3.6, 2026-10-14)
+## Текущее состояние (Phase 3.1–3.7, 2026-10-14)
 
 | Этап | Статус |
 |---|---|
@@ -20,7 +20,7 @@ _Реализация — Phase 3 (анализ: 3.1–3.6 готовы, 3.7 —
 | Budget gate: оценка, `confirm_token`, `budgets` (по умолчанию без лимита), стоп перед превышением | ✅ 3.4 (запуск анализа — 3.5) |
 | Vision-аудит превью (`thumbnail_analyses`, `thumbnail_analysis/v1`, кэш SHA-256/pHash, `overall_score` кодом по `scoring_profiles`, запуск по `confirm_token`, UI результатов) | ✅ 3.5 (mock и тесты; реальные вызовы vibecode для этого промпта — не проверены) |
 | Сравнительный аудит канала (`channel_analyses`, `channel_analysis/v1`, 3–12 превью в одном vision-вызове, кэш по входным данным, агрегаты кодом, запуск по `confirm_token`, UI в проекте и на карточке канала) | ✅ 3.6 (mock и тесты; реальные вызовы vibecode для этого промпта — не проверены) |
-| Lead scoring, leads | ⏳ 3.7 |
+| Лиды и Lead Score (`leads`, `lead_scores`, `lead_status_history`, `ideal_lead_profiles`; детерминированный объяснимый балл и Priority Score по `scoring_profiles` `lead`/`priority`, автосоздание `DISCOVERED`/`ANALYZED`, пересчёт после задач проекта, UI лидов с фильтрами §9 и редактором весов) | ✅ 3.7 (без AI; Contactability — вес 0 до Phase 6; `lead_explanation/v1` не сделан) |
 | Генерация превью | ⏳ Phase 5 |
 | Офферы | ⏳ Phase 6+ |
 
@@ -77,6 +77,19 @@ bulk-текст — `vc-text-bulk` (`gpt-6-luna`). Image-модели (`vc-gpt-i
    текущим аудитам превью и весам workspace.
 6. Ошибки — как у аудита превью: отдельный канал (невалидный вывод, отказ, нет файла) не останавливает задачу.
 
+### Лиды и Lead Score (Phase 3.7, `app/domains/leads/`)
+
+1. После задач проекта (discovery, `thumbnail_analysis`, `channel_analysis`) воркер в отдельной транзакции вызывает
+   `sync_leads` для этого проекта: каждый канал проекта получает лид workspace (`DISCOVERED`); при хотя бы одном
+   текущем аудите превью — переход `DISCOVERED → ANALYZED` (оба — в `lead_status_history`, автор NULL). Итог — в
+   `job_runs.result.leads`; ошибка пересчёта не отменяет работу задачи.
+2. Балл (`scoring.py`, без AI) — 8 компонентов, каждый даёт долю 0–1 и причину: Thumbnail Opportunity, Channel Fit
+   (профиль идеального лида), Audience, Views, Activity, Growth, Contactability (до Phase 6 — «нет данных», вес 0),
+   Niche Value. Нет данных — 0 баллов. Lead Score = Σ баллов / Σ максимумов · 100; Priority Score — те же доли с
+   отдельными весами.
+3. Пересчёт также при `PUT /api/scoring-profiles/{thumbnail,lead,priority}`, изменении профиля идеального лида и
+   `POST /api/leads/sync`. Новая строка `lead_scores` пишется, только если результат изменился.
+
 ## Поток (целевой)
 
 ```
@@ -87,7 +100,7 @@ discovery (YouTube API)          → channels, videos, thumbnails(pending)
                  └─ budget gate  → оценка стоимости → подтверждение пользователя
                       └─ thumbnail_audit (vision)  → thumbnail_analyses (subscores, problems[])
                            └─ channel_audit        → channel_analyses
-                                └─ lead_score (код) → leads.priority_score + разбор по компонентам
+                                └─ lead_score (код) → lead_scores (total, priority_score, разбор)  [есть]
                                      └─ оператор выбирает лидов (SELECTED)          [человек]
                                           └─ thumbnail_generation (brief из problems[]) → generated_thumbnails
                                                └─ оператор выбирает вариант                [человек]

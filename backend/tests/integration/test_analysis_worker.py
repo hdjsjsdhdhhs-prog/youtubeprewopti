@@ -11,6 +11,7 @@ from sqlalchemy import select, text
 
 import app.workers.tasks  # noqa: F401  (registers tasks on queue_app)
 from app.core.db import get_sessionmaker
+from app.core.state_machine import LeadStatus
 from app.domains.ai.models import AICall
 from app.domains.analysis.channel_service import (
     channel_visual_report,
@@ -27,6 +28,7 @@ from app.domains.analysis.schemas import (
 from app.domains.analysis.service import estimate_thumbnail_analysis, start_thumbnail_analysis
 from app.domains.identity.service import create_owner
 from app.domains.jobs.models import JobRun
+from app.domains.leads.models import Lead, LeadScore
 from app.domains.media.models import ImageSource
 from app.domains.media.service import ensure_image_metrics, store_image
 from app.providers.ai import MockAIProvider
@@ -90,6 +92,15 @@ async def test_worker_runs_the_confirmed_audit(committed, settings, storage):
         after = await estimate_thumbnail_analysis(db, settings, ws.id, p.id, AnalysisEstimateRequest())
         assert (after.items, after.already_analyzed) == (0, 3)
 
+        # 3.7: the job created the project's lead, advanced it to ANALYZED and scored it
+        assert run.result["leads"] == {
+            "leads_created": 1, "leads_analyzed": 1, "scores_changed": 1, "scores_unchanged": 0,
+        }
+        [lead] = list(await db.scalars(select(Lead).where(Lead.workspace_id == ws.id)))
+        assert lead.status == LeadStatus.ANALYZED and lead.created_from_project_id == p.id
+        score = await db.scalar(select(LeadScore).where(LeadScore.lead_id == lead.id, LeadScore.is_current))
+        assert score is not None and score.avg_thumbnail_score is not None and score.thumbnail_opportunity > 0
+
 
 async def _run_worker(storage) -> None:
     async with queue_app.open_async():
@@ -131,3 +142,9 @@ async def test_worker_runs_thumbnail_then_channel_audit(committed, settings, sto
         assert report.aggregates is not None and report.aggregates.thumbnails_analyzed == 3
         again = await estimate_channel_analysis(db, settings, ws.id, p.id, ChannelAnalysisRequest())
         assert (again.items, again.already_analyzed) == (0, 1)
+
+        # 3.7: the channel audit's visual opportunity now feeds the lead's Thumbnail Opportunity
+        assert run.result["leads"]["leads_created"] == 0 and run.result["leads"]["scores_changed"] == 1
+        score = await db.scalar(select(LeadScore).where(LeadScore.is_current))
+        [thumb] = [c for c in score.components if c["key"] == "thumbnail_opportunity"]
+        assert thumb["inputs"]["visual_opportunity"] == row.visual_opportunity.value
