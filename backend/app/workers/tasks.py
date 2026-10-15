@@ -19,6 +19,7 @@ from app.domains.jobs import service as jobs
 from app.domains.jobs.service import JobQueue, JobType
 from app.domains.leads.service import sync_project_leads
 from app.domains.media.service import DownloadOutcome, MetricsOutcome, ingest_thumbnail
+from app.domains.offers.pipeline import run_offer_generation
 from app.providers.ai import AIProvider, open_ai_provider
 from app.providers.storage import LocalFSStorage, StorageBackend
 from app.providers.thumbnails import ThumbnailFetcher, open_thumbnail_fetcher
@@ -158,6 +159,28 @@ async def thumbnail_generation(ctx: JobRunContext) -> dict[str, Any]:
     async def run(provider: AIProvider) -> dict[str, Any]:
         return await run_thumbnail_generation(
             sessions, provider, storage, settings, job_run_id=ctx.job_run_id, workspace_id=ctx.workspace_id,
+            params=ctx.params, progress=ctx.progress, last_attempt=last_attempt,
+        )
+
+    override: AIProvider | None = ctx.resources.get("ai_provider")
+    if override is not None:
+        return await run(override)
+    async with open_ai_provider(settings) as provider:
+        return await run(provider)
+
+
+@job_task(name=JobType.OFFER_GENERATION.value, queue=JobQueue.INTERACTIVE)
+async def offer_generation(ctx: JobRunContext) -> dict[str, Any]:
+    """params: ``{"offer_id", "round", "lead_id", "project_id"}`` — see
+    ``offers.pipeline.run_offer_generation``. Started only with a confirmed estimate (paid). Writes drafts
+    into the Approval Queue; nothing is sent."""
+    settings = get_settings()
+    sessions = get_sessionmaker()
+    last_attempt = ctx.attempt >= settings.worker_retry_max_attempts
+
+    async def run(provider: AIProvider) -> dict[str, Any]:
+        return await run_offer_generation(
+            sessions, provider, settings, job_run_id=ctx.job_run_id, workspace_id=ctx.workspace_id,
             params=ctx.params, progress=ctx.progress, last_attempt=last_attempt,
         )
 

@@ -1,6 +1,20 @@
 "use client";
 
-import { Ban, FolderKanban, Images, ListChecks, LogOut, Network, Scale, Star, Tags, Target, Tv } from "lucide-react";
+import {
+  Ban,
+  FileText,
+  FolderKanban,
+  Images,
+  Inbox,
+  ListChecks,
+  LogOut,
+  Network,
+  Scale,
+  Star,
+  Tags,
+  Target,
+  Tv,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
@@ -13,6 +27,8 @@ const NAV = [
   { href: "/projects", label: "Проекты", icon: FolderKanban, key: "p" },
   { href: "/channels", label: "Каналы", icon: Tv, key: "c" },
   { href: "/leads", label: "Лиды", icon: Target, key: "l" },
+  { href: "/approvals", label: "Подтверждение", icon: Inbox, key: "q" },
+  { href: "/offer-templates", label: "Шаблоны офферов", icon: FileText, key: "o" },
   { href: "/favorites", label: "Избранное", icon: Star, key: "f" },
   { href: "/tags", label: "Теги", icon: Tags, key: "t" },
   { href: "/references", label: "Референсы", icon: Images, key: "r" },

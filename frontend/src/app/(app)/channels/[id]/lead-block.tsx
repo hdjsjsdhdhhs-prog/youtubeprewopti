@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { LeadScoreBreakdown } from "@/components/lead-score";
 import { FavoriteStar, HumanScore, LeadStatusActions, LeadTagsEditor } from "@/components/lead-workflow";
+import { LeadOffer } from "@/components/lead-offer";
 import { InlineError } from "@/components/states";
 import { LeadGeneration } from "@/components/thumbnail-generation";
 import { Badge, Card } from "@/components/ui";
@@ -16,6 +17,12 @@ const leadQuery = (channelId: number): LeadQuery => ({ channel_id: channelId, so
 export function ChannelGeneration({ channelId }: { channelId: number }) {
   const lead = useLeads(leadQuery(channelId)).data?.items[0];
   return lead ? <LeadGeneration lead={lead} /> : null;
+}
+
+/** The personalized offer of the channel's lead (Phase 7). */
+export function ChannelOffer({ channelId }: { channelId: number }) {
+  const lead = useLeads(leadQuery(channelId)).data?.items[0];
+  return lead ? <LeadOffer lead={lead} /> : null;
 }
 
 /** The channel as a lead of this workspace: status, decisions, tags, favorite, human scores (Phase 4) and the

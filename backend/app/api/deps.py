@@ -121,3 +121,4 @@ def require(permission: Permission) -> Callable[..., Coroutine[Any, Any, AuthCon
 
 ReadAuth = Annotated[AuthContext, Depends(require(Permission.READ))]
 WriteAuth = Annotated[AuthContext, Depends(require(Permission.WRITE))]
+SendAuth = Annotated[AuthContext, Depends(require(Permission.OUTREACH_SEND))]  # approve / schedule

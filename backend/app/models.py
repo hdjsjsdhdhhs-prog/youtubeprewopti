@@ -21,6 +21,7 @@ from app.domains.identity.models import (
 from app.domains.jobs.models import JobRun
 from app.domains.leads.models import IdealLeadProfile, Lead, LeadScore, LeadStatusHistory, LeadTag, Tag
 from app.domains.media.models import ImageAsset, ImageMetrics, Thumbnail
+from app.domains.offers.models import Offer, OfferStatusHistory, OfferTemplate, OfferVariant
 from app.domains.projects.models import (
     ChannelDiscovery,
     ProjectChannel,
@@ -44,6 +45,7 @@ __all__ = [
     "ChannelStatsSnapshot", "Favorite", "FeedbackEvent", "GeneratedThumbnail", "GenerationRequest",
     "IdealLeadProfile", "IdempotencyKey", "ImageAsset", "StyleReference",
     "ImageMetrics", "JobRun", "Lead", "LeadScore", "LeadStatusHistory", "LeadTag", "ProjectChannel",
+    "Offer", "OfferStatusHistory", "OfferTemplate", "OfferVariant",
     "ProjectNiche", "PromptTemplate", "ScoreOverride", "ScoringProfile", "SearchProject",
     "SearchQuery", "Secret", "Tag", "TaxonomyNode", "Thumbnail", "ThumbnailAnalysis", "User", "UserSession",
     "Video",

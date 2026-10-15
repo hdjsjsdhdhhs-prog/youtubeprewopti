@@ -46,6 +46,8 @@ class FeedbackKind(StrEnum):
     SCORE_OVERRIDE_REMOVED = "score_override_removed"  # back to the AI value
     LEAD_STATUS = "lead_status"  # a manual lead decision (shortlist / select / reject …)
     GENERATION_DECISION = "generation_decision"  # approve / reject / final of a generated variant (Phase 5)
+    OFFER_DECISION = "offer_decision"  # approve / reject / skip of an offer (Phase 7)
+    OFFER_EDIT = "offer_edit"  # manual edit of an offer: what changed, text before / after (Phase 7)
 
 
 class FeedbackEvent(IdMixin, Base):

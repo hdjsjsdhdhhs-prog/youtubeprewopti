@@ -493,8 +493,42 @@ Lead Score каналов с этим изображением, ручные `to
 `lead_decisions[]` — ручные решения по статусам со средним Lead Score кода в момент решения; `events` — всего событий.
 
 **Approval Queue.** Таблица `approvals` и проверка `approvals.service.require_approval` (решение привязано к SHA-256
-содержимого: изменение после approve → `409 approval_outdated`, нет approve → `409 not_approved`) готовы; эндпоинтов
-и раздела очереди пока нет — им нечего показывать до офферов (Phase 7).
+содержимого: изменение после approve → `409 approval_outdated`, нет approve → `409 not_approved`); эндпоинты — в разделе
+«Офферы и Approval Queue (Phase 7)».
+
+### Офферы и Approval Queue (Phase 7, ТЗ §20–23, §28)
+
+Ничего не отправляется: Approve и Schedule только записывают решение человека, привязанное к точному содержимому.
+
+- `POST /api/leads/{id}/offer/estimate` (viewer+) `OfferIn {variant_count 1–3 = 3, instructions ≤ 2000, template_id?,
+  language? (ru, en, pt-BR …), attach_sample = true, attachment_variant_id?}` → `OfferEstimate`: `inputs` (пронумерованные
+  факты F1…Fn, образец, шаблон, инструкции, язык), `prompt_preview` варианта A, `styles`, цена, бюджеты,
+  `confirm_token`, `offer_id` / `round` (оффер, который получит новый раунд, если он уже есть). Ничего не вызывается.
+- `POST /api/leads/{id}/offers` (operator+) `OfferStart = OfferIn + confirm_token` → 202 `OfferStartResult`. 409:
+  `confirmation_required` (новый токен в `details`), `offer_generating`, `generation_running` (идёт генерация превью),
+  `lead_status`, `ai_not_configured`. Задача `offer_generation` (очередь `interactive`), подтверждённая сумма — потолок.
+- `GET /api/leads/{id}/offers` → `LeadOffers {items (новые первыми), contacts, samples}`; `GET /api/offers/{id}` →
+  `OfferOut`: статус, варианты всех раундов (`guard_issues`, `personalization_score`, `personalization_sources`,
+  `structure`, `claims`), контакт, канал, вложение, `content_hash`, `blockers`, `can_approve`, `approval` (последнее
+  решение, `is_current` — сделано на текущем содержимом).
+- `PATCH /api/offers/{id}` (operator+) `OfferEdit {variant_id?, subject?, body?, cta?, contact_id?, channel?,
+  attachment_variant_id?}` — отправляются только меняемые поля, `null` у контакта / вложения снимает их. Правка текста →
+  `manually_edited`, проверка текста и personalization пересчитываются. Изменение содержимого подтверждённого /
+  запланированного оффера → обратно `pending_approval`. 409 `offer_not_editable`, `variant_not_ready`; 404 — чужой
+  вариант / контакт / вложение.
+- `POST /api/offers/{id}/decision` (operator+, `outreach_send`) `{decision: approve | reject | skip, comment ≤ 500,
+  content_hash}` — для approve `content_hash` обязателен и должен совпасть с текущим (409 `content_changed`), иначе
+  409 `offer_not_approvable` с `details.blockers` (`no_variant`, `guard_issues`, `contact_required`,
+  `contact_unusable`, `channel_required`, `channel_mismatch`, `lead_closed`, `status`). reject — из pending /
+  approved / scheduled; skip — только pending (оффер уходит в конец очереди).
+- `POST /api/offers/{id}/schedule` (`outreach_send`) `{scheduled_at: aware datetime в будущем}` — только approved /
+  scheduled и только при действующем approval (409 `not_approved` / `approval_outdated`); `DELETE` — снять план.
+- `GET /api/approval-queue?status=pending_approval|approved|scheduled|draft|rejected|failed&project_id&limit≤100&offset`
+  → `ApprovalQueue {items: QueueCard[], total, counts}`; карточка: `offer`, `channel`, `lead` (Lead / Priority /
+  Contactability Score), `thumbnail` (превью, которое переделывал образец, иначе самое слабое), `analysis`, `contacts`,
+  `samples`. Ожидающие: непропущенные первыми, затем по Priority Score. Лиды rejected / opted_out не показываются.
+- `GET /api/offer-templates` (последние версии), `POST` `{name, body}`, `PUT /{id}` — новая версия того же шаблона
+  (офферы сохраняют свою), `DELETE /{id}` — архив всех версий.
 
 ### AI: реестр моделей, расходы и бюджеты (Phase 3.3–3.4)
 

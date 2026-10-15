@@ -1168,6 +1168,174 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/leads/{lead_id}/offer/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estimate Offer
+         * @description The facts the drafts may use (channel, concrete videos, audit problems, the free sample …), the exact
+         *     prompt of variant A, price, budgets and the ``confirm_token``. Nothing is generated or charged.
+         */
+        post: operations["estimate_offer_api_leads__lead_id__offer_estimate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leads/{lead_id}/offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lead Offers */
+        get: operations["lead_offers_api_leads__lead_id__offers_get"];
+        put?: never;
+        /**
+         * Start Offer
+         * @description Queue the confirmed estimate: a new offer, or a new round of the lead's latest one («Regenerate»).
+         *     409: ``confirmation_required`` (new token), ``offer_generating``, ``generation_running``,
+         *     ``lead_status``.
+         */
+        post: operations["start_offer_api_leads__lead_id__offers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/offers/{offer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Offer */
+        get: operations["get_offer_api_offers__offer_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit Offer
+         * @description ТЗ §23: text / subject / CTA (marks ``manually_edited``), selected draft, attachment, contact, channel.
+         *     A changed approved / scheduled offer goes back to the queue.
+         */
+        patch: operations["edit_offer_api_offers__offer_id__patch"];
+        trace?: never;
+    };
+    "/api/offers/{offer_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Offer
+         * @description approve (echo ``content_hash``; 409 ``content_changed`` / ``offer_not_approvable`` with blockers),
+         *     reject, skip (stays in the queue, at its end).
+         */
+        post: operations["decide_offer_api_offers__offer_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/offers/{offer_id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Schedule Offer
+         * @description Store the send time of an approved offer (409 ``not_approved`` / ``approval_outdated``).
+         */
+        post: operations["schedule_offer_api_offers__offer_id__schedule_post"];
+        /** Unschedule Offer */
+        delete: operations["unschedule_offer_api_offers__offer_id__schedule_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approval-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Approval Queue
+         * @description ТЗ §22 cards: creator / channel, thumbnail, AI analysis, Lead Score, generated preview, offer draft,
+         *     contact channels.
+         */
+        get: operations["approval_queue_api_approval_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/offer-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Templates */
+        get: operations["list_templates_api_offer_templates_get"];
+        put?: never;
+        /** Create Template */
+        post: operations["create_template_api_offer_templates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/offer-templates/{template_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Template
+         * @description Adds a new version; offers keep the version they were written from.
+         */
+        put: operations["update_template_api_offer_templates__template_id__put"];
+        post?: never;
+        /** Archive Template */
+        delete: operations["archive_template_api_offer_templates__template_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/status": {
         parameters: {
             query?: never;
@@ -1601,6 +1769,43 @@ export interface components {
              * @default false
              */
             is_favorite: boolean;
+        };
+        /**
+         * ApprovalDecision
+         * @enum {string}
+         */
+        ApprovalDecision: "approved" | "rejected" | "skipped";
+        /** ApprovalOut */
+        ApprovalOut: {
+            decision: components["schemas"]["ApprovalDecision"];
+            /** Content Hash */
+            content_hash: string;
+            /** Is Current */
+            is_current: boolean;
+            /** Comment */
+            comment: string;
+            /** User Id */
+            user_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ApprovalQueue */
+        ApprovalQueue: {
+            /** Items */
+            items: components["schemas"]["QueueCard"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
         };
         /** AuditProblem */
         AuditProblem: {
@@ -2707,6 +2912,18 @@ export interface components {
          * @enum {string}
          */
         GenerationStatus: "queued" | "running" | "completed" | "failed";
+        /** GuardIssue */
+        GuardIssue: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "unsupported_number" | "metric_claim" | "guarantee" | "unsupported_claim" | "empty_text";
+            /** Text */
+            text: string;
+            /** Message */
+            message: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -3068,6 +3285,18 @@ export interface components {
             lead_profile: components["schemas"]["LeadProfileOut"];
             priority_profile: components["schemas"]["PriorityProfileOut"];
         };
+        /** LeadOffers */
+        LeadOffers: {
+            /** Lead Id */
+            lead_id: number;
+            lead_status: components["schemas"]["LeadStatus"];
+            /** Items */
+            items: components["schemas"]["OfferOut"][];
+            /** Contacts */
+            contacts: components["schemas"]["ContactOut"][];
+            /** Samples */
+            samples: components["schemas"]["SampleOut"][];
+        };
         /** LeadOut */
         LeadOut: {
             /** Id */
@@ -3357,6 +3586,396 @@ export interface components {
             /** Level */
             level: string;
         };
+        /**
+         * OfferClaim
+         * @description A factual statement of the text about the channel and the facts it is based on.
+         */
+        OfferClaim: {
+            /** Text */
+            text: string;
+            /** Fact Ids */
+            fact_ids: number[];
+        };
+        /**
+         * OfferDecisionIn
+         * @description ``approve`` must echo ``content_hash`` of the offer the human looked at (changed meanwhile => 409).
+         */
+        OfferDecisionIn: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject" | "skip";
+            /**
+             * Comment
+             * @default
+             */
+            comment: string;
+            /** Content Hash */
+            content_hash?: string | null;
+        };
+        /**
+         * OfferEdit
+         * @description ТЗ §23. Only the fields sent are changed; ``contact_id`` / ``attachment_variant_id`` = null clears.
+         *     Text fields edit the selected variant (after ``variant_id`` if both are sent) and mark the offer
+         *     ``manually_edited``. Any change of the content of an approved / scheduled offer sends it back to the
+         *     queue: the approval no longer matches.
+         */
+        OfferEdit: {
+            /** Variant Id */
+            variant_id?: number | null;
+            /** Subject */
+            subject?: string | null;
+            /** Body */
+            body?: string | null;
+            /** Cta */
+            cta?: string | null;
+            /** Contact Id */
+            contact_id?: number | null;
+            channel?: components["schemas"]["OutreachChannel"] | null;
+            /** Attachment Variant Id */
+            attachment_variant_id?: number | null;
+        };
+        /** OfferEstimate */
+        OfferEstimate: {
+            /** Lead Id */
+            lead_id: number;
+            lead_status: components["schemas"]["LeadStatus"];
+            /** Offer Id */
+            offer_id: number | null;
+            /** Round */
+            round: number;
+            /** Provider */
+            provider: string | null;
+            /** Model Key */
+            model_key: string | null;
+            /** Api Model Id */
+            api_model_id: string | null;
+            /** Variant Count */
+            variant_count: number;
+            /** Styles */
+            styles: components["schemas"]["OfferStyle"][];
+            /** Cost Per Variant Usd */
+            cost_per_variant_usd: string | null;
+            /** Estimated Cost Usd */
+            estimated_cost_usd: string | null;
+            /** Pricing Verified */
+            pricing_verified: boolean;
+            inputs: components["schemas"]["OfferInputs"];
+            /** Prompt Preview */
+            prompt_preview: string;
+            /** Samples */
+            samples: components["schemas"]["SampleOut"][];
+            /** Budgets */
+            budgets: components["schemas"]["BudgetCheckOut"][];
+            /** Within Budgets */
+            within_budgets: boolean;
+            /** Confirm Token */
+            confirm_token: string;
+        };
+        /** OfferFact */
+        OfferFact: {
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "channel" | "niche" | "video" | "thumbnail_problem" | "recommendation" | "channel_audit" | "sample";
+            /** Field */
+            field: string;
+            /** Value */
+            value: string;
+            /** Ref */
+            ref?: {
+                [key: string]: number;
+            };
+        };
+        /**
+         * OfferIn
+         * @description What to write. ``attachment_variant_id`` — the free sample (an approved / final generated variant of
+         *     the lead); default = the lead's final sample; ``attach_sample=false`` = no attachment.
+         */
+        OfferIn: {
+            /**
+             * Variant Count
+             * @default 3
+             */
+            variant_count: number;
+            /**
+             * Instructions
+             * @default
+             */
+            instructions: string;
+            /** Template Id */
+            template_id?: number | null;
+            /** Language */
+            language?: string | null;
+            /**
+             * Attach Sample
+             * @default true
+             */
+            attach_sample: boolean;
+            /** Attachment Variant Id */
+            attachment_variant_id?: number | null;
+        };
+        /**
+         * OfferInputs
+         * @description Stored on the offer (``offers.inputs``): exactly what the drafts of the current round were written
+         *     from. The guard and the score of edited texts use the same snapshot.
+         */
+        OfferInputs: {
+            /** Channel Title */
+            channel_title: string;
+            /** Language */
+            language: string;
+            /** Facts */
+            facts: components["schemas"]["OfferFact"][];
+            sample: components["schemas"]["OfferSample"] | null;
+            template: components["schemas"]["OfferTemplateRef"] | null;
+            /** Instructions */
+            instructions: string;
+        };
+        /** OfferOut */
+        OfferOut: {
+            /** Id */
+            id: number;
+            /** Lead Id */
+            lead_id: number;
+            /** Channel Id */
+            channel_id: number;
+            status: components["schemas"]["OfferStatus"];
+            /** Round */
+            round: number;
+            /** Variant Count */
+            variant_count: number;
+            /** Language */
+            language: string;
+            /** Instructions */
+            instructions: string;
+            template: components["schemas"]["OfferTemplateRef"] | null;
+            inputs: components["schemas"]["OfferInputs"];
+            contact: components["schemas"]["ContactOut"] | null;
+            channel: components["schemas"]["OutreachChannel"] | null;
+            attachment: components["schemas"]["SampleOut"] | null;
+            /** Manually Edited */
+            manually_edited: boolean;
+            /** Scheduled At */
+            scheduled_at: string | null;
+            /** Skipped At */
+            skipped_at: string | null;
+            /** Model Key */
+            model_key: string | null;
+            /** Estimated Cost Usd */
+            estimated_cost_usd: string | null;
+            /** Spent Usd */
+            spent_usd: string;
+            /** Error */
+            error: string | null;
+            job: components["schemas"]["JobRunOut"] | null;
+            /** Provider Is Mock */
+            provider_is_mock: boolean;
+            /** Selected Variant Id */
+            selected_variant_id: number | null;
+            /** Personalization Score */
+            personalization_score: string | null;
+            /** Content Hash */
+            content_hash: string;
+            /** Blockers */
+            blockers: ("status" | "no_variant" | "guard_issues" | "contact_required" | "contact_unusable" | "channel_required" | "channel_mismatch" | "lead_closed")[];
+            /** Can Approve */
+            can_approve: boolean;
+            approval: components["schemas"]["ApprovalOut"] | null;
+            /** Variants */
+            variants: components["schemas"]["OfferVariantOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * OfferSample
+         * @description The free sample attached to the offer (a generated variant) and what it fixes.
+         */
+        OfferSample: {
+            /** Variant Id */
+            variant_id: number;
+            /** Label */
+            label: string;
+            /** Strategy */
+            strategy: string;
+            /** Video Title */
+            video_title: string | null;
+            /** Fixes */
+            fixes: string[];
+        };
+        /** OfferScheduleIn */
+        OfferScheduleIn: {
+            /**
+             * Scheduled At
+             * Format: date-time
+             */
+            scheduled_at: string;
+        };
+        /** OfferStart */
+        OfferStart: {
+            /**
+             * Variant Count
+             * @default 3
+             */
+            variant_count: number;
+            /**
+             * Instructions
+             * @default
+             */
+            instructions: string;
+            /** Template Id */
+            template_id?: number | null;
+            /** Language */
+            language?: string | null;
+            /**
+             * Attach Sample
+             * @default true
+             */
+            attach_sample: boolean;
+            /** Attachment Variant Id */
+            attachment_variant_id?: number | null;
+            /** Confirm Token */
+            confirm_token: string;
+        };
+        /** OfferStartResult */
+        OfferStartResult: {
+            offer: components["schemas"]["OfferOut"];
+            lead_status: components["schemas"]["LeadStatus"];
+        };
+        /**
+         * OfferStatus
+         * @enum {string}
+         */
+        OfferStatus: "draft" | "pending_approval" | "approved" | "scheduled" | "rejected" | "failed";
+        /**
+         * OfferStructure
+         * @description ТЗ §20: OBSERVATION → PROBLEM → SPECIFIC INSIGHT → VALUE → FREE SAMPLE → LOW-FRICTION CTA.
+         */
+        OfferStructure: {
+            /** Observation */
+            observation: string;
+            /** Problem */
+            problem: string;
+            /** Insight */
+            insight: string;
+            /** Value */
+            value: string;
+            /** Free Sample */
+            free_sample: string;
+            /** Cta */
+            cta: string;
+        };
+        /**
+         * OfferStyle
+         * @description ТЗ §28: A — professional, B — as short as possible, C — focused on the free sample.
+         * @enum {string}
+         */
+        OfferStyle: "professional" | "short" | "free_sample";
+        /** OfferTemplateIn */
+        OfferTemplateIn: {
+            /** Name */
+            name: string;
+            /** Body */
+            body: string;
+        };
+        /** OfferTemplateOut */
+        OfferTemplateOut: {
+            /** Id */
+            id: number;
+            /** Key */
+            key: string;
+            /** Version */
+            version: number;
+            /** Name */
+            name: string;
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** OfferTemplateRef */
+        OfferTemplateRef: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Version */
+            version: number;
+            /** Body */
+            body: string;
+        };
+        /** OfferVariantOut */
+        OfferVariantOut: {
+            /** Id */
+            id: number;
+            /** Round */
+            round: number;
+            /** Label */
+            label: string;
+            style: components["schemas"]["OfferStyle"];
+            status: components["schemas"]["OfferVariantStatus"];
+            /** Is Selected */
+            is_selected: boolean;
+            /** Subject */
+            subject: string;
+            /** Body */
+            body: string;
+            /** Cta */
+            cta: string;
+            structure: components["schemas"]["OfferStructure"] | null;
+            /** Claims */
+            claims: components["schemas"]["OfferClaim"][];
+            /** Guard Issues */
+            guard_issues: components["schemas"]["GuardIssue"][];
+            /** Personalization Score */
+            personalization_score: string | null;
+            /** Personalization Sources */
+            personalization_sources: components["schemas"]["PersonalizationSource"][];
+            /** Model Key */
+            model_key: string | null;
+            /** Cost Usd */
+            cost_usd: string | null;
+            /** Error */
+            error: string | null;
+            /** Edited */
+            edited: boolean;
+            /** Edited By */
+            edited_by: number | null;
+            /** Edited At */
+            edited_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * OfferVariantStatus
+         * @enum {string}
+         */
+        OfferVariantStatus: "pending" | "ready" | "failed" | "refused";
+        /**
+         * OutreachChannel
+         * @description How the offer will be sent (ТЗ §23 «канал отправки»). ``manual`` = the operator sends it himself
+         *     (ADR-0010 ManualSendProvider) — possible with any contact type.
+         * @enum {string}
+         */
+        OutreachChannel: "email" | "telegram" | "vk" | "manual";
         /** OverrideRemoved */
         OverrideRemoved: {
             rescored: components["schemas"]["RescoreResult"] | null;
@@ -3446,6 +4065,19 @@ export interface components {
             pattern: string;
             /** Evidence */
             evidence: string;
+        };
+        /** PersonalizationSource */
+        PersonalizationSource: {
+            /** Fact Id */
+            fact_id: number;
+            /** Kind */
+            kind: string;
+            /** Field */
+            field: string;
+            /** Value */
+            value: string;
+            /** Counted */
+            counted: boolean;
         };
         /** PrefilterPreview */
         PrefilterPreview: {
@@ -3717,6 +4349,67 @@ export interface components {
             taxonomy_node_id?: number | null;
             search_type?: components["schemas"]["SearchType"] | null;
         };
+        /** QueueAnalysis */
+        QueueAnalysis: {
+            /** Summary */
+            summary: string | null;
+            /** Visual Opportunity */
+            visual_opportunity: string | null;
+            /** Problem Codes */
+            problem_codes: string[];
+        };
+        /** QueueCard */
+        QueueCard: {
+            offer: components["schemas"]["OfferOut"];
+            channel: components["schemas"]["QueueChannel"];
+            lead: components["schemas"]["QueueLead"];
+            thumbnail: components["schemas"]["QueueThumbnail"] | null;
+            analysis: components["schemas"]["QueueAnalysis"] | null;
+            /** Contacts */
+            contacts: components["schemas"]["ContactOut"][];
+            /** Samples */
+            samples: components["schemas"]["SampleOut"][];
+        };
+        /** QueueChannel */
+        QueueChannel: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Handle */
+            handle: string | null;
+            /** Url */
+            url: string;
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Subscriber Count */
+            subscriber_count: number | null;
+        };
+        /** QueueLead */
+        QueueLead: {
+            /** Id */
+            id: number;
+            status: components["schemas"]["LeadStatus"];
+            /** Lead Score */
+            lead_score: string | null;
+            /** Priority Score */
+            priority_score: string | null;
+            /** Contactability Score */
+            contactability_score: string | null;
+        };
+        /** QueueThumbnail */
+        QueueThumbnail: {
+            /** Video Id */
+            video_id: number;
+            /** Title */
+            title: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Overall Score */
+            overall_score: string | null;
+            /** Problem Codes */
+            problem_codes: string[];
+        };
         /** QuotaOut */
         QuotaOut: {
             /** Provider */
@@ -3842,6 +4535,26 @@ export interface components {
              * @default 0
              */
             system_tags_changed: number;
+        };
+        /**
+         * SampleOut
+         * @description A generated thumbnail that can be attached as the free sample.
+         */
+        SampleOut: {
+            /** Variant Id */
+            variant_id: number;
+            /** Generation Request Id */
+            generation_request_id: number;
+            /** Label */
+            label: string;
+            /** Strategy */
+            strategy: string;
+            /** Status */
+            status: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Video Title */
+            video_title: string | null;
         };
         /** ScoreComponentOut */
         ScoreComponentOut: {
@@ -6917,6 +7630,425 @@ export interface operations {
             header?: never;
             path: {
                 entry_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    estimate_offer_api_leads__lead_id__offer_estimate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lead_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferEstimate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lead_offers_api_leads__lead_id__offers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lead_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadOffers"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_offer_api_leads__lead_id__offers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lead_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferStart"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferStartResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_offer_api_offers__offer_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_offer_api_offers__offer_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_offer_api_offers__offer_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferDecisionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    schedule_offer_api_offers__offer_id__schedule_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferScheduleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unschedule_offer_api_offers__offer_id__schedule_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approval_queue_api_approval_queue_get: {
+        parameters: {
+            query?: {
+                status?: "pending_approval" | "approved" | "scheduled" | "draft" | "rejected" | "failed";
+                project_id?: number | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalQueue"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_templates_api_offer_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferTemplateOut"][];
+                };
+            };
+        };
+    };
+    create_template_api_offer_templates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferTemplateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferTemplateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_template_api_offer_templates__template_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferTemplateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferTemplateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_template_api_offer_templates__template_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: number;
             };
             cookie?: never;
         };
