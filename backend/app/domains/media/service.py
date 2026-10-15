@@ -70,7 +70,9 @@ async def store_image(
 
 async def asset_visible_to_workspace(db: AsyncSession, asset_id: int, workspace_id: int) -> bool:
     """An asset is visible if it is the thumbnail of a video whose channel is in one of the workspace's
-    projects. Generated/reference assets will add their own ownership paths (Phase 5)."""
+    projects, a variant generated for one of its leads or one of its style references (Phase 5)."""
+    from app.domains.generation.models import GeneratedThumbnail, GenerationRequest, StyleReference
+
     via_thumbnail = (
         select(Thumbnail.id)
         .join(Video, Video.id == Thumbnail.video_id)
@@ -78,7 +80,17 @@ async def asset_visible_to_workspace(db: AsyncSession, asset_id: int, workspace_
         .join(SearchProject, SearchProject.id == ProjectChannel.project_id)
         .where(Thumbnail.image_asset_id == asset_id, SearchProject.workspace_id == workspace_id)
     )
-    return bool(await db.scalar(select(exists(via_thumbnail))))
+    via_generation = (
+        select(GeneratedThumbnail.id)
+        .join(GenerationRequest, GenerationRequest.id == GeneratedThumbnail.generation_request_id)
+        .where(GeneratedThumbnail.image_asset_id == asset_id, GenerationRequest.workspace_id == workspace_id)
+    )
+    via_reference = select(StyleReference.id).where(
+        StyleReference.image_asset_id == asset_id, StyleReference.workspace_id == workspace_id
+    )
+    return bool(
+        await db.scalar(select(or_(exists(via_thumbnail), exists(via_generation), exists(via_reference))))
+    )
 
 
 class DownloadOutcome(StrEnum):

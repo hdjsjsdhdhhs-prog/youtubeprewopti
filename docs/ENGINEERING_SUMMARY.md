@@ -1,7 +1,7 @@
 # ENGINEERING SUMMARY
 
-_Обновлено: 2026-10-14 — Phase 1, 2, 3.1–3.7 закоммичены (`8584307`), Phase 4 (human workflow) реализована, не
-закоммичена; backend-тесты с PostgreSQL проходят (см. ниже).
+_Обновлено: 2026-10-15 — Phase 1, 2, 3.1–3.7 и Phase 4 закоммичены (`05191bf`), Phase 5 (генерация превью)
+реализована и проверена на mock (см. ниже); backend-тесты с PostgreSQL проходят.
 Архитектурное исследование — 2026-09-24._
 
 **PROJECT:**
@@ -275,6 +275,51 @@ vibecode для `thumbnail_analysis/v1` — **не проверены** (раз�
   новых таблиц — DML да, CREATE в схеме нет. Backend `pytest` — **318 passed / 1 skipped** (+16: 10 API + 6 unit).
 - **Не проверено:** сквозной прогон реальными процессами (uvicorn + воркер + `next start`), отрисовка UI в браузере
   (Playwright не установлен), CI.
+
+**PHASE 5 — ГЕНЕРАЦИЯ ПРЕВЬЮ (2026-10-15):** ТЗ §12–14, §42–43; AI_ARCHITECTURE §7; миграция `9a4c2e7b5d18`.
+- **Brief без AI** (`generation/brief.py`): коды проблем аудита превью (и повторяющиеся проблемы аудита канала) →
+  конкретные директивы «что исправить» (не более 6), контекст канала (ниши, название видео, сводка стиля канала),
+  палитра текущего превью, рекомендации аналитика, инструкции владельца, выбранные референсы (≤ 3) и история решений
+  по лиду (что одобрено / отклонено). Каждый вариант A–F получает тот же brief + свою композиционную стратегию
+  (`subject_closeup`, `object_contrast`, `minimal`, `dynamic_depth`, `cinematic`, `high_energy`). Промпт —
+  `prompts/thumbnail_generation/v1.md` (версионируется и хэшируется, как остальные).
+- **Estimate → confirm → start** (`generation/service.py`): `POST /api/leads/{id}/generation/estimate` показывает brief,
+  точный промпт варианта A, цену за картинку, бюджеты и `confirm_token`; `POST /api/leads/{id}/generations` запускает
+  ровно подтверждённое (иначе 409 `confirmation_required` с новым токеном; 409 `generation_running`, если уже идёт).
+  Подтверждённая сумма — жёсткий потолок задачи (`job_runs.budget_usd`); бюджеты проверяются перед каждой картинкой.
+  Источник — по умолчанию самое слабое превью канала с аудитом (иначе новейшее), можно выбрать другое видео, режим
+  «только описание» (без исходной картинки) и «создать больше таких» (родительский вариант становится image 1).
+- **Статус лида** (ADR-0011): запуск переводит лид в `GENERATION_PENDING` (через `SELECTED`, если нужно — нажатие
+  «Generate» считается решением владельца); задача завершается в `GENERATED`, если есть хотя бы один готовый вариант,
+  иначе возвращает лид в `SELECTED`.
+- **Задача `thumbnail_generation`** (очередь `interactive`, `generation/pipeline.py`): по одному вызову на вариант через
+  `AIRunner.generate_image` (резерв стоимости, строка `ai_calls`, fallback по маршруту), результат обрезается до 16:9
+  1280×720 JPEG и сохраняется content-addressed; каждый вариант коммитится отдельно, повтор задачи продолжает с
+  `pending`. Отказ модерации → вариант `refused` (остальные продолжаются); битый ответ → `failed`; бюджет / потолок /
+  постоянная ошибка провайдера → остальные `failed`, задача падает; временная ошибка → повтор.
+- **AI-слой:** `AITask.THUMBNAIL_GENERATION`, цена за картинку (`image_price`: `"<quality>@<size>"` или `default`; цена
+  неизвестна → USD-бюджет блокирует), `IntegrationErrorCode.CONTENT_POLICY` (модерация — отказ, не сбой). Маршрут:
+  `vc-gpt-image-2.5` → `vc-gpt-image-2` → OpenAI `image-fast` / `image-precise` (ключи по AI_ARCHITECTURE §7, не
+  проверены, цен нет) → `mock-image`.
+- **Решения по вариантам** (§13): `POST /api/generated-thumbnails/{id}/decision` — approve / reject / final («использовать
+  как бесплатный образец», один на лид) / reset; пишется в `feedback_events` (`generation_decision`) и `audit_logs`.
+  Результаты и оригиналы для сравнения «Original vs Generated» — `GET /api/leads/{id}/generations`.
+- **Референсы стиля** (§43): `GET/POST /api/references`, `PATCH/DELETE /api/references/{id}` — изображение base64
+  (JPEG/PNG/WebP, ≤ 10 МБ) + название, описание, стиль, категория, теги; доступ к картинкам — через проверку
+  принадлежности workspace (`asset_visible_to_workspace` учитывает варианты и референсы). Удаление референса не
+  ломает прошлые генерации.
+- Frontend: блок генерации на карточке канала (`components/thumbnail-generation.tsx`: оценка, подтверждение, прогресс,
+  сравнение оригинала и вариантов, решения), страница «Референсы» (`g r`), хуки `lib/api/generation-hooks.ts`, чистая
+  логика `lib/generation.ts`.
+- Проверки (2026-10-15): backend `pytest` **358 passed / 1 skipped** (+40: brief и стратегии, `image_price`, обрезка
+  16:9, API оценки / запуска / решений / референсов / ролей / изоляции workspace, сквозной воркер на mock — retry,
+  refusal, потолок стоимости, дневной бюджет, неизвестная цена, fallback модели), `ruff check app tests`, `mypy app`
+  (131 файл), `alembic upgrade head` + `alembic check` на `ytlead` — без расхождений; frontend `npm run typecheck`,
+  `npm run lint` (0 ошибок, прежнее предупреждение `useVirtualizer`), `npm test` — 89 (+23), `next build` (14 маршрутов).
+- **Не проверено:** реальные вызовы vibecode для генерации (разработка на mock, платных вызовов не было; транспорт
+  `/images/generations` и `/images/edits` проверен ранее, но не через этот конвейер), сквозной прогон реальными
+  процессами (uvicorn + воркер + `next start`), отрисовка UI в браузере (Playwright не установлен), CI, права
+  `ytlead_app` на новые таблицы (default privileges — не перечитаны).
 
 **VERIFICATION STATUS (этап архитектуры):**
 - Verified: версии пакетов (PyPI/npm), Procrastinate на Windows + PG16 (spike), квоты YouTube (официальная документация), модели gpt-image-2.5-flare/sunburst и линейка GPT-6 (документация OpenAI).

@@ -306,6 +306,8 @@ async def test_ai_status_and_model_prices(client, auth, settings, monkeypatch):
         "vc-nano-banana-pro",
         "mock-vision",
         "mock-text",
+        "image-fast",
+        "image-precise",
         "mock-image",
     }
     assert (

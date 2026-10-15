@@ -38,6 +38,9 @@ _LABELS = {"openai": ("OpenAI", "YTL_OPENAI_API_KEY"), "vibecode": ("vibecode.mo
 # Error codes/messages meaning "this model can't serve the request" => fall back to the next model.
 _MODEL_UNAVAILABLE_CODES = frozenset({"model_not_found", "unsupported_model", "unsupported_value"})
 _MODEL_UNAVAILABLE_HINTS = ("does not support", "does not exist", "not supported", "unsupported")
+# Image moderation (OpenAI: ``moderation_blocked``; older/compatible APIs: ``content_policy_violation``).
+_CONTENT_POLICY_CODES = frozenset({"moderation_blocked", "content_policy_violation", "content_filter"})
+_CONTENT_POLICY_HINTS = ("safety system", "content policy", "moderation")
 _EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
 
 
@@ -96,6 +99,10 @@ def classify_openai_error(exc: openai.OpenAIError, model: str, provider: str = P
         return _err(IntegrationErrorCode.RATE_LIMITED, f"{label} rate limit hit; will retry later.",
                     retryable=True, status=status)
     lowered = message.lower()
+    if code in _CONTENT_POLICY_CODES or (status == 400 and any(h in lowered for h in _CONTENT_POLICY_HINTS)):
+        return _err(IntegrationErrorCode.CONTENT_POLICY,
+                    f"{label} moderation rejected the request: {message[:300]}",
+                    retryable=False, status=status)
     if isinstance(exc, openai.NotFoundError) or code in _MODEL_UNAVAILABLE_CODES or (
         status == 400 and "model" in lowered and any(h in lowered for h in _MODEL_UNAVAILABLE_HINTS)
     ):

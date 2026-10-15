@@ -127,6 +127,8 @@ export const qk = {
   favorites: ["favorites"] as const,
   favoriteList: (p: { entity_type?: FavoriteEntity; offset: number }) => ["favorites", "list", p] as const,
   feedbackSummary: ["feedback", "summary"] as const,
+  leadGenerations: (leadId: number) => ["leads", "detail", leadId, "generations"] as const,
+  references: ["references"] as const,
 };
 
 // --- auth -------------------------------------------------------------------------------------

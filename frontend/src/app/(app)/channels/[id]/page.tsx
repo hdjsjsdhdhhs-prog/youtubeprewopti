@@ -20,7 +20,7 @@ import {
 import { formatCount, formatDate, formatDateTime, formatDuration, formatRatio } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-import { ChannelLead } from "./lead-block";
+import { ChannelGeneration, ChannelLead } from "./lead-block";
 import { ChannelVisualAudit } from "./visual-audit";
 
 export default function ChannelDetailPage() {
@@ -70,6 +70,7 @@ function ChannelView({ id }: { id: number }) {
       <Stats channel={c} />
       <Performance channel={c} />
       <ChannelLead channelId={c.id} />
+      <ChannelGeneration channelId={c.id} />
       <ChannelVisualAudit channelId={c.id} />
       {c.description ? <p className="mt-3 max-w-3xl whitespace-pre-line text-sm text-zinc-600 dark:text-zinc-400">{c.description}</p> : null}
       <Discoveries channel={c} />

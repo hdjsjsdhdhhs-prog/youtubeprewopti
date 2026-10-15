@@ -13,6 +13,7 @@ from app.domains.analysis.channel_pipeline import run_channel_analysis
 from app.domains.analysis.pipeline import run_thumbnail_analysis
 from app.domains.discovery.quota import CommittingQuota
 from app.domains.discovery.service import run_discovery
+from app.domains.generation.pipeline import run_thumbnail_generation
 from app.domains.jobs import service as jobs
 from app.domains.jobs.service import JobQueue, JobType
 from app.domains.leads.service import sync_project_leads
@@ -136,6 +137,28 @@ async def channel_analysis(ctx: JobRunContext) -> dict[str, Any]:
             params=ctx.params, progress=ctx.progress,
         )
         return await _sync_leads(ctx, result)
+
+    override: AIProvider | None = ctx.resources.get("ai_provider")
+    if override is not None:
+        return await run(override)
+    async with open_ai_provider(settings) as provider:
+        return await run(provider)
+
+
+@job_task(name=JobType.THUMBNAIL_GENERATION.value, queue=JobQueue.INTERACTIVE)
+async def thumbnail_generation(ctx: JobRunContext) -> dict[str, Any]:
+    """params: ``{"generation_request_id", "lead_id", "project_id"}`` — see
+    ``generation.pipeline.run_thumbnail_generation``. Started only with a confirmed estimate (paid)."""
+    settings = get_settings()
+    sessions = get_sessionmaker()
+    storage: StorageBackend = ctx.resources.get("storage") or LocalFSStorage(settings.storage_path)
+    last_attempt = ctx.attempt >= settings.worker_retry_max_attempts
+
+    async def run(provider: AIProvider) -> dict[str, Any]:
+        return await run_thumbnail_generation(
+            sessions, provider, storage, settings, job_run_id=ctx.job_run_id, workspace_id=ctx.workspace_id,
+            params=ctx.params, progress=ctx.progress, last_attempt=last_attempt,
+        )
 
     override: AIProvider | None = ctx.resources.get("ai_provider")
     if override is not None:

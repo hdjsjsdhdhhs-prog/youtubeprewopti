@@ -28,12 +28,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.errors import AppError, IntegrationError, IntegrationErrorCode
 from app.domains.ai import budget
-from app.domains.ai.cost import estimate_call_cost, token_cost
+from app.domains.ai.cost import estimate_call_cost, image_price, token_cost
 from app.domains.ai.models import AICall, AICallStatus, AIModel
 from app.domains.ai.prompts import PROMPTS_DIR, LoadedPrompt, load_prompt
 from app.domains.ai.registry import TASKS, AITask, resolve_models
 from app.domains.jobs.models import JobRun
-from app.providers.ai import AIProvider, ImageDetail, ImageInput, StructuredRequest, StructuredResponse
+from app.providers.ai import (
+    AIProvider,
+    GeneratedImage,
+    ImageDetail,
+    ImageGenRequest,
+    ImageInput,
+    StructuredRequest,
+    StructuredResponse,
+)
 
 Sessions = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 MAX_ERRORS_SHOWN = 10
@@ -70,6 +78,15 @@ class AIResult[T: BaseModel]:
     model_key: str
     status: AICallStatus  # OK or REPAIRED
     cost_usd: Decimal | None  # sum over the attempts of this result (None = price unknown)
+
+
+@dataclass(frozen=True)
+class ImageResult:
+    images: list[GeneratedImage]
+    call_id: int
+    model_key: str
+    api_model_id: str
+    cost_usd: Decimal | None  # None = price unknown
 
 
 def _validation_errors(exc: ValidationError) -> list[dict[str, Any]]:
@@ -229,6 +246,115 @@ class AIRunner:
                 output=output, call_id=call_id, model_key=model.key, status=status, cost_usd=total
             )
         raise AssertionError("unreachable")
+
+    # ------------------------------------------------------------------------------------------------
+    # Image generation (Phase 5): same reservation / accounting / fallback, priced per image
+    # ------------------------------------------------------------------------------------------------
+    async def generate_image(
+        self,
+        *,
+        task: AITask,
+        prompt: LoadedPrompt,
+        text: str,
+        ctx: CallContext,
+        references: Sequence[ImageInput] = (),
+        model_key: str | None = None,
+        size: str | None = None,
+        quality: str | None = None,
+    ) -> ImageResult:
+        """One image (``references`` empty = generation, else an edit). ``model_key`` pins the model (the
+        one the user confirmed); otherwise the task route with fallback. Moderation => ``AIRefusedError``."""
+        models = await self.candidates(task)
+        if model_key is not None:
+            models = [m for m in models if m.key == model_key]
+        if not models:
+            raise AINotConfiguredError(
+                f"No enabled image model for task '{task.value}'"
+                + (f" with key '{model_key}'" if model_key else "")
+                + f" (provider: {self._settings.effective_ai_provider or 'not configured'}).",
+            )
+        last: IntegrationError | None = None
+        for model in models:
+            try:
+                return await self._image_on_model(task, model, prompt, text, ctx, references, size, quality)
+            except IntegrationError as exc:
+                if exc.code != IntegrationErrorCode.MODEL_UNAVAILABLE:
+                    raise
+                last = exc
+        assert last is not None
+        raise last
+
+    async def _image_on_model(
+        self,
+        task: AITask,
+        model: AIModel,
+        prompt: LoadedPrompt,
+        text: str,
+        ctx: CallContext,
+        references: Sequence[ImageInput],
+        size: str | None,
+        quality: str | None,
+    ) -> ImageResult:
+        price = image_price(model, quality=quality, size=size)
+        call_id = await self._reserve(task, model, prompt, ctx, 1, price, len(references))
+        request = ImageGenRequest(
+            model=model.api_model_id, prompt=text, references=tuple(references), size=size, quality=quality,
+            n=1,
+        )
+        started = time.monotonic()
+        try:
+            response = await self._provider.generate_images(request)
+        except IntegrationError as exc:
+            refused = exc.code == IntegrationErrorCode.CONTENT_POLICY
+            await self._finish_image(
+                call_id, ctx, started, AICallStatus.REFUSED if refused else AICallStatus.ERROR, Decimal(0), 0,
+                error_code="refused" if refused else exc.code.value, error_message=exc.human_message,
+            )
+            if refused:
+                raise AIRefusedError(exc.human_message) from exc
+            raise
+        except BaseException as exc:
+            await self._finish_image(call_id, ctx, started, AICallStatus.ERROR, Decimal(0), 0,
+                                     error_code="internal_error", error_message=type(exc).__name__)
+            raise
+        images = response.images[:1]
+        cost = None if price is None else price * len(images)
+        await self._finish_image(call_id, ctx, started, AICallStatus.OK, cost, len(images),
+                                 output={"images": len(images), "model": response.model})
+        return ImageResult(
+            images=images, call_id=call_id, model_key=model.key, api_model_id=model.api_model_id, cost_usd=cost  # noqa: E501
+        )
+
+    async def _finish_image(
+        self,
+        call_id: int,
+        ctx: CallContext,
+        started: float,
+        status: AICallStatus,
+        cost: Decimal | None,
+        image_outputs: int,
+        *,
+        output: dict[str, Any] | None = None,
+        error_code: str | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        async with self._sessions() as db:
+            await db.execute(
+                update(AICall).where(AICall.id == call_id).values(
+                    status=status, duration_ms=int((time.monotonic() - started) * 1000), output=output,
+                    error_code=error_code, error_message=error_message, image_outputs=image_outputs,
+                    actual_cost_usd=cost,
+                )
+            )
+            if ctx.job_run_id is not None and cost:
+                await db.execute(
+                    update(JobRun).where(JobRun.id == ctx.job_run_id)
+                    .values(actual_cost_usd=JobRun.actual_cost_usd + cost)
+                )
+            await db.commit()
+        self.calls += 1
+        if cost:
+            self.spent_usd += cost
 
     async def _reserve(
         self,

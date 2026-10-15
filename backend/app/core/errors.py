@@ -59,6 +59,7 @@ class IntegrationErrorCode(StrEnum):
     TIMEOUT = "timeout"
     NOT_CONFIGURED = "not_configured"
     MODEL_UNAVAILABLE = "model_unavailable"  # unknown model ID / unsupported capability => try next model
+    CONTENT_POLICY = "content_policy"  # provider moderation blocked the request: a refusal, not a failure
     UNKNOWN = "unknown"
 
 

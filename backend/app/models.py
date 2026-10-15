@@ -7,6 +7,7 @@ from app.domains.approvals.models import Approval
 from app.domains.discovery.models import YouTubeQuotaLedger
 from app.domains.favorites.models import Favorite
 from app.domains.feedback.models import FeedbackEvent, ScoreOverride
+from app.domains.generation.models import GeneratedThumbnail, GenerationRequest, StyleReference
 from app.domains.identity.models import (
     AuditLog,
     IdempotencyKey,
@@ -38,7 +39,8 @@ from app.domains.youtube.models import (
 __all__ = [
     "AICall", "AIModel", "Approval", "AuditLog", "Base", "Budget", "Channel", "ChannelAnalysis",
     "ChannelDiscovery", "ChannelMetrics",
-    "ChannelStatsSnapshot", "Favorite", "FeedbackEvent", "IdealLeadProfile", "IdempotencyKey", "ImageAsset",
+    "ChannelStatsSnapshot", "Favorite", "FeedbackEvent", "GeneratedThumbnail", "GenerationRequest",
+    "IdealLeadProfile", "IdempotencyKey", "ImageAsset", "StyleReference",
     "ImageMetrics", "JobRun", "Lead", "LeadScore", "LeadStatusHistory", "LeadTag", "ProjectChannel",
     "ProjectNiche", "PromptTemplate", "ScoreOverride", "ScoringProfile", "SearchProject",
     "SearchQuery", "Secret", "Tag", "TaxonomyNode", "Thumbnail", "ThumbnailAnalysis", "User", "UserSession",

@@ -880,6 +880,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/leads/{lead_id}/generation/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estimate Generation
+         * @description Brief built from the analysis (problems → directives, channel style, palette, instructions,
+         *     references, earlier decisions), the exact prompt of variant A, the price per image and budgets, and the
+         *     ``confirm_token``. Nothing is generated or charged.
+         */
+        post: operations["estimate_generation_api_leads__lead_id__generation_estimate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leads/{lead_id}/generations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lead Generations
+         * @description All generations of the lead (newest first) with their variants and the originals they redesigned —
+         *     the data of the «Original vs Generated» comparison.
+         */
+        get: operations["lead_generations_api_leads__lead_id__generations_get"];
+        put?: never;
+        /**
+         * Start Generation
+         * @description Queue the confirmed estimate (409 ``confirmation_required`` with the new token if anything changed,
+         *     409 ``generation_running`` if one is already running for the lead). The confirmed total is the job's
+         *     hard cost cap. The lead moves to ``generation_pending`` (via ``selected``).
+         */
+        post: operations["start_generation_api_leads__lead_id__generations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/generated-thumbnails/{variant_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Variant
+         * @description approve / reject / final («use as final free sample», one per lead) / reset. Logged as feedback.
+         */
+        post: operations["decide_variant_api_generated_thumbnails__variant_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List References */
+        get: operations["list_references_api_references_get"];
+        put?: never;
+        /**
+         * Create Reference
+         * @description Upload a style reference: the image as base64 (JPEG / PNG / WebP, ≤ 10 MB) plus title, description,
+         *     style, category and tags.
+         */
+        post: operations["create_reference_api_references_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/references/{reference_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Reference
+         * @description Earlier generations keep the image they were made from.
+         */
+        delete: operations["delete_reference_api_references__reference_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Reference */
+        patch: operations["update_reference_api_references__reference_id__patch"];
+        trace?: never;
+    };
     "/api/ai/status": {
         parameters: {
             query?: never;
@@ -1332,6 +1444,45 @@ export interface components {
             action: string;
             /** Rationale */
             rationale: string;
+        };
+        /** BriefFix */
+        BriefFix: {
+            /** Code */
+            code: string;
+            /** Severity */
+            severity: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "thumbnail" | "channel";
+            /** Problem */
+            problem: string;
+            /** Directive */
+            directive: string;
+        };
+        /** BriefHistory */
+        BriefHistory: {
+            /**
+             * Previous Requests
+             * @default 0
+             */
+            previous_requests: number;
+            /** Approved */
+            approved?: string[];
+            /** Rejected */
+            rejected?: string[];
+        };
+        /** BriefReference */
+        BriefReference: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Style */
+            style: string;
+            /** Description */
+            description: string;
         };
         /** BudgetCheckOut */
         BudgetCheckOut: {
@@ -1813,6 +1964,30 @@ export interface components {
             overrides?: components["schemas"]["ScoreOverrideOut"][];
         };
         /**
+         * ComparisonOriginal
+         * @description The original side of «Original vs Generated» (ТЗ §42).
+         */
+        ComparisonOriginal: {
+            /** Video Id */
+            video_id: number;
+            /** Title */
+            title: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Overall Score */
+            overall_score: string | null;
+            /** Problems */
+            problems: {
+                [key: string]: unknown;
+            }[];
+            /** Recommendations */
+            recommendations: {
+                [key: string]: unknown;
+            }[];
+            /** Visual Summary */
+            visual_summary: string | null;
+        };
+        /**
          * DecisionStats
          * @description Manual lead decisions and the Lead Score the code gave the lead at that moment.
          */
@@ -1975,6 +2150,193 @@ export interface components {
          * @enum {string}
          */
         FetchStatus: "pending" | "ok" | "failed";
+        /**
+         * GenerationBrief
+         * @description Stored on the request (``generation_requests.brief``): exactly the data the prompts were built from.
+         */
+        GenerationBrief: {
+            /** Channel Title */
+            channel_title: string;
+            /** Niches */
+            niches: string[];
+            /** Video Title */
+            video_title: string | null;
+            /** Base Image */
+            base_image: ("current_thumbnail" | "parent_variant") | null;
+            /** Fixes */
+            fixes: components["schemas"]["BriefFix"][];
+            /** Recommendations */
+            recommendations: string[];
+            /** Channel Summary */
+            channel_summary: string | null;
+            /** Palette */
+            palette: string[];
+            /** Instructions */
+            instructions: string;
+            /** References */
+            references: components["schemas"]["BriefReference"][];
+            history: components["schemas"]["BriefHistory"];
+        };
+        /** GenerationEstimate */
+        GenerationEstimate: {
+            /** Lead Id */
+            lead_id: number;
+            lead_status: components["schemas"]["LeadStatus"];
+            /** Provider */
+            provider: string | null;
+            /** Model Key */
+            model_key: string | null;
+            /** Api Model Id */
+            api_model_id: string | null;
+            /** Models */
+            models: components["schemas"]["ImageModelOption"][];
+            /** Variant Count */
+            variant_count: number;
+            /** Price Per Image Usd */
+            price_per_image_usd: string | null;
+            /** Estimated Cost Usd */
+            estimated_cost_usd: string | null;
+            /** Pricing Verified */
+            pricing_verified: boolean;
+            source: components["schemas"]["SourceCandidate"] | null;
+            /** Source Candidates */
+            source_candidates: components["schemas"]["SourceCandidate"][];
+            brief: components["schemas"]["GenerationBrief"];
+            /** Prompt Preview */
+            prompt_preview: string;
+            /** Budgets */
+            budgets: components["schemas"]["BudgetCheckOut"][];
+            /** Within Budgets */
+            within_budgets: boolean;
+            /** Confirm Token */
+            confirm_token: string;
+        };
+        /**
+         * GenerationIn
+         * @description What to generate for a lead. ``source_video_id`` — the video whose current thumbnail is redesigned
+         *     (default: the weakest audited thumbnail of the channel); ``parent_variant_id`` — «create more like this»
+         *     (the variant replaces the current thumbnail as image 1).
+         */
+        GenerationIn: {
+            /**
+             * Variant Count
+             * @default 4
+             */
+            variant_count: number;
+            /**
+             * Instructions
+             * @default
+             */
+            instructions: string;
+            /** Reference Ids */
+            reference_ids?: number[];
+            /** Source Video Id */
+            source_video_id?: number | null;
+            /**
+             * Use Source Image
+             * @default true
+             */
+            use_source_image: boolean;
+            /** Parent Variant Id */
+            parent_variant_id?: number | null;
+            /** Model Key */
+            model_key?: string | null;
+            /**
+             * Size
+             * @default 1536x1024
+             */
+            size: ("1536x1024" | "1024x1024" | "1024x1536" | "auto") | null;
+            /** Quality */
+            quality?: ("low" | "medium" | "high" | "auto") | null;
+        };
+        /** GenerationOut */
+        GenerationOut: {
+            /** Id */
+            id: number;
+            /** Lead Id */
+            lead_id: number;
+            status: components["schemas"]["GenerationStatus"];
+            /** Source Video Id */
+            source_video_id: number | null;
+            /** Source Image Url */
+            source_image_url: string | null;
+            /** Parent Variant Id */
+            parent_variant_id: number | null;
+            /** Instructions */
+            instructions: string;
+            /** Reference Ids */
+            reference_ids: number[];
+            /** Variant Count */
+            variant_count: number;
+            /** Model Key */
+            model_key: string;
+            /** Size */
+            size: string | null;
+            /** Quality */
+            quality: string | null;
+            brief: components["schemas"]["GenerationBrief"];
+            /** Estimated Cost Usd */
+            estimated_cost_usd: string | null;
+            /** Spent Usd */
+            spent_usd: string;
+            /** Error */
+            error: string | null;
+            job: components["schemas"]["JobRunOut"] | null;
+            /** Provider Is Mock */
+            provider_is_mock: boolean;
+            /** Variants */
+            variants: components["schemas"]["VariantOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** GenerationStart */
+        GenerationStart: {
+            /**
+             * Variant Count
+             * @default 4
+             */
+            variant_count: number;
+            /**
+             * Instructions
+             * @default
+             */
+            instructions: string;
+            /** Reference Ids */
+            reference_ids?: number[];
+            /** Source Video Id */
+            source_video_id?: number | null;
+            /**
+             * Use Source Image
+             * @default true
+             */
+            use_source_image: boolean;
+            /** Parent Variant Id */
+            parent_variant_id?: number | null;
+            /** Model Key */
+            model_key?: string | null;
+            /**
+             * Size
+             * @default 1536x1024
+             */
+            size: ("1536x1024" | "1024x1024" | "1024x1536" | "auto") | null;
+            /** Quality */
+            quality?: ("low" | "medium" | "high" | "auto") | null;
+            /** Confirm Token */
+            confirm_token: string;
+        };
+        /** GenerationStartResult */
+        GenerationStartResult: {
+            generation: components["schemas"]["GenerationOut"];
+            lead_status: components["schemas"]["LeadStatus"];
+        };
+        /**
+         * GenerationStatus
+         * @enum {string}
+         */
+        GenerationStatus: "queued" | "running" | "completed" | "failed";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2095,6 +2457,17 @@ export interface components {
             saliency_center_ratio: number | null;
             /** Dominant Colors */
             dominant_colors: components["schemas"]["DominantColor"][];
+        };
+        /** ImageModelOption */
+        ImageModelOption: {
+            /** Key */
+            key: string;
+            /** Api Model Id */
+            api_model_id: string;
+            /** Price Per Image Usd */
+            price_per_image_usd: string | null;
+            /** Pricing Verified */
+            pricing_verified: boolean;
         };
         /** JobRunDetail */
         JobRunDetail: {
@@ -2293,6 +2666,18 @@ export interface components {
             tag?: number[];
             /** Favorite */
             favorite?: boolean | null;
+        };
+        /** LeadGenerations */
+        LeadGenerations: {
+            /** Lead Id */
+            lead_id: number;
+            lead_status: components["schemas"]["LeadStatus"];
+            /** Final Variant Id */
+            final_variant_id: number | null;
+            /** Items */
+            items: components["schemas"]["GenerationOut"][];
+            /** Originals */
+            originals: components["schemas"]["ComparisonOriginal"][];
         };
         /** LeadList */
         LeadList: {
@@ -2965,6 +3350,74 @@ export interface components {
             /** Why */
             why: string;
         };
+        /**
+         * ReferenceIn
+         * @description ``image_base64`` — the file (JPEG / PNG / WebP, ≤ 10 MB) as base64 (optionally a ``data:`` URL).
+         */
+        ReferenceIn: {
+            /** Image Base64 */
+            image_base64: string;
+            /** Title */
+            title: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Style
+             * @default
+             */
+            style: string;
+            /**
+             * Category
+             * @default
+             */
+            category: string;
+            /** Tags */
+            tags?: string[];
+        };
+        /** ReferenceOut */
+        ReferenceOut: {
+            /** Id */
+            id: number;
+            /** Image Asset Id */
+            image_asset_id: number;
+            /** Image Url */
+            image_url: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Style */
+            style: string;
+            /** Category */
+            category: string;
+            /** Tags */
+            tags: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ReferencePatch */
+        ReferencePatch: {
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Style */
+            style?: string | null;
+            /** Category */
+            category?: string | null;
+            /** Tags */
+            tags?: string[] | null;
+        };
         /** RejectedLine */
         RejectedLine: {
             /** Line */
@@ -3134,6 +3587,23 @@ export interface components {
          * @enum {string}
          */
         SortOrder: "asc" | "desc";
+        /** SourceCandidate */
+        SourceCandidate: {
+            /** Video Id */
+            video_id: number;
+            /** Title */
+            title: string;
+            /** Published At */
+            published_at: string | null;
+            /** View Count */
+            view_count: number | null;
+            /** Image Url */
+            image_url: string | null;
+            /** Overall Score */
+            overall_score: string | null;
+            /** Problem Codes */
+            problem_codes: string[];
+        };
         /** SpendOut */
         SpendOut: {
             period: components["schemas"]["BudgetPeriod"];
@@ -3496,6 +3966,74 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * VariantDecision
+         * @description approve / reject / final («use as final free sample»: one per lead, the previous final becomes
+         *     approved) / reset (back to ready).
+         */
+        VariantDecision: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject" | "final" | "reset";
+            /**
+             * Comment
+             * @default
+             */
+            comment: string;
+        };
+        /** VariantOut */
+        VariantOut: {
+            /** Id */
+            id: number;
+            /** Label */
+            label: string;
+            /** Strategy */
+            strategy: string;
+            status: components["schemas"]["VariantStatus"];
+            /** Image Asset Id */
+            image_asset_id: number | null;
+            /** Image Url */
+            image_url: string | null;
+            /** Prompt */
+            prompt: string;
+            /** Model Key */
+            model_key: string;
+            /** Api Model Id */
+            api_model_id: string | null;
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Source Image Ids */
+            source_image_ids: number[];
+            /** Parent Id */
+            parent_id: number | null;
+            /** Cost Usd */
+            cost_usd: string | null;
+            /** Error */
+            error: string | null;
+            /** Decided By */
+            decided_by: number | null;
+            /** Decided At */
+            decided_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * VariantStatus
+         * @enum {string}
+         */
+        VariantStatus: "pending" | "ready" | "failed" | "refused" | "approved" | "rejected" | "final";
         /** VideoDetail */
         VideoDetail: {
             /** Id */
@@ -5307,6 +5845,259 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OverrideRemoved"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    estimate_generation_api_leads__lead_id__generation_estimate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lead_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationEstimate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lead_generations_api_leads__lead_id__generations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lead_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadGenerations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_generation_api_leads__lead_id__generations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lead_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerationStart"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationStartResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_variant_api_generated_thumbnails__variant_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                variant_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VariantDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadGenerations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_references_api_references_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferenceOut"][];
+                };
+            };
+        };
+    };
+    create_reference_api_references_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReferenceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferenceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_reference_api_references__reference_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reference_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_reference_api_references__reference_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reference_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReferencePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferenceOut"];
                 };
             };
             /** @description Validation Error */

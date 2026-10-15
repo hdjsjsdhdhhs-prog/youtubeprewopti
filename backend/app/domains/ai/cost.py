@@ -31,6 +31,15 @@ def token_cost(model: AIModel, input_tokens: int, output_tokens: int) -> Decimal
     return cost.quantize(_Q)
 
 
+def image_price(model: AIModel, *, quality: str | None = None, size: str | None = None) -> Decimal | None:
+    """USD per generated image: ``"<quality>@<size>"`` if the registry has it, else the flat ``"default"``;
+    None = unknown (a USD budget then refuses the call)."""
+    prices = model.price_per_image or {}
+    raw = prices.get(f"{quality}@{size}") if quality and size else None
+    raw = raw if raw is not None else prices.get("default")
+    return None if raw is None else Decimal(str(raw)).quantize(_Q)
+
+
 def estimate_tokens(spec: TaskSpec, images: int, detail: ImageDetail) -> tuple[int, int]:
     return spec.est_input_tokens + images * IMAGE_INPUT_TOKENS_EST[detail], spec.est_output_tokens
 

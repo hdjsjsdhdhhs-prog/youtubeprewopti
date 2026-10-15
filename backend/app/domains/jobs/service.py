@@ -41,6 +41,7 @@ class JobType(StrEnum):
     DISCOVERY = "discovery"
     THUMBNAIL_ANALYSIS = "thumbnail_analysis"
     CHANNEL_ANALYSIS = "channel_analysis"
+    THUMBNAIL_GENERATION = "thumbnail_generation"
 
 
 # Composite literal matches procrastinate_job_to_defer_v1

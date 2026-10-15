@@ -37,6 +37,7 @@ class AITask(StrEnum):
     CLASSIFICATION = "classification"
     LEAD_EXPLANATION = "lead_explanation"
     OFFER_GENERATION = "offer_generation"
+    THUMBNAIL_GENERATION = "thumbnail_generation"
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,9 @@ _VISION_ROUTE = (
 )
 _BULK_ROUTE = ("text-bulk", "vision-standard", "vc-text-bulk", "vc-vision-standard", "mock-text")
 _PREMIUM_ROUTE = ("text-premium", "vision-standard", "vc-text-premium", "vc-vision-standard", "mock-text")
+# Thumbnail generation (Phase 5): GPT Image 2.5 by default (owner's decision, 2026-10-15), then the cheaper
+# GPT Image 2 as fallback; OpenAI keys follow AI_ARCHITECTURE §7 (unverified, no prices).
+_IMAGE_ROUTE = ("vc-gpt-image-2.5", "vc-gpt-image-2", "image-fast", "image-precise", "mock-image")
 
 TASKS: dict[AITask, TaskSpec] = {
     AITask.THUMBNAIL_ANALYSIS: TaskSpec(_VISION, _VISION_ROUTE, 1200, 900),
@@ -64,6 +68,8 @@ TASKS: dict[AITask, TaskSpec] = {
     AITask.CLASSIFICATION: TaskSpec(_TEXT, _BULK_ROUTE, 800, 300),
     AITask.LEAD_EXPLANATION: TaskSpec(_TEXT, _BULK_ROUTE, 900, 250),
     AITask.OFFER_GENERATION: TaskSpec(_TEXT, _PREMIUM_ROUTE, 2000, 900),
+    # priced per image (``price_per_image``), not per token
+    AITask.THUMBNAIL_GENERATION: TaskSpec(_IMAGE, _IMAGE_ROUTE, 0, 0),
 }
 
 MOCK_NOTE = "Offline mock, free."
@@ -109,6 +115,8 @@ def default_models(settings: Settings) -> list[ModelDefault]:
         ModelDefault("vision-premium", "openai", "gpt-6-astra", _VISION),
         ModelDefault("text-bulk", "openai", "gpt-6-luna", _TEXT),
         ModelDefault("text-premium", "openai", "gpt-6-astra", _TEXT),
+        ModelDefault("image-fast", "openai", settings.openai_image_model or "gpt-image-2.5-flare", _IMAGE),
+        ModelDefault("image-precise", "openai", "gpt-image-2.5-sunburst", _IMAGE),
         # vibecode.moe — analysis through the Responses API (vision + json_schema)
         _vc_chat("vc-vision-standard", "gpt-6-sol", "0.170585", "0.852925"),
         _vc_chat("vc-vision-premium", "gpt-6-astra", "0.852925", "4.264624"),

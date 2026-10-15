@@ -21,6 +21,7 @@ from app.api.routes import (
     discovery,
     favorites,
     feedback,
+    generation,
     jobs,
     leads,
     media,
@@ -55,7 +56,7 @@ def create_app() -> FastAPI:
 
     for module in (
         auth, projects, taxonomy, discovery, youtube, media, analysis, scoring, leads, tags, favorites,
-        feedback, ai, jobs,
+        feedback, generation, ai, jobs,
     ):
         api.include_router(module.router)
     api.include_router(analysis.channel_router)

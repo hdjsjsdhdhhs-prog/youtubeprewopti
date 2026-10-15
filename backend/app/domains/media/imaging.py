@@ -182,6 +182,34 @@ def prepare_for_vision(data: bytes) -> tuple[bytes, str, bool]:
     return buf.getvalue(), "image/jpeg", was_cropped
 
 
+THUMBNAIL_SIZE = (1280, 720)  # YouTube's recommended thumbnail size (16:9)
+THUMBNAIL_JPEG_QUALITY = 92
+
+
+def fit_thumbnail(data: bytes, size: tuple[int, int] = THUMBNAIL_SIZE) -> bytes:
+    """A generated image as a YouTube thumbnail: centre-cropped to the target aspect ratio and resized (image
+    models return 1:1 / 3:2 frames), JPEG. Raises ``InvalidImageError``."""
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            img = im.convert("RGB")
+    except (UnidentifiedImageError, OSError, SyntaxError) as exc:
+        raise InvalidImageError(f"not a valid image: {exc}") from exc
+    tw, th = size
+    w, h = img.size
+    if w * th > h * tw:  # wider than the target => crop the sides
+        new_w = max(1, round(h * tw / th))
+        left = (w - new_w) // 2
+        img = img.crop((left, 0, left + new_w, h))
+    elif w * th < h * tw:  # taller => crop top and bottom
+        new_h = max(1, round(w * th / tw))
+        top = (h - new_h) // 2
+        img = img.crop((0, top, w, top + new_h))
+    img = img.resize(size, Image.Resampling.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=THUMBNAIL_JPEG_QUALITY)
+    return buf.getvalue()
+
+
 def compute_image_metrics(data: bytes) -> ImageMetricValues:
     """Objective metrics of an image (Pillow + NumPy only). Raises ``InvalidImageError``."""
     try:
