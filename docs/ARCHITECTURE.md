@@ -45,7 +45,7 @@ Discovery → Enrichment → Filtering → Thumbnail Analysis → Lead Scoring �
 | Contacts | `contact_enrichment` | bulk | опционально | правка |
 | Offer | `offer_generation` | interactive | text-premium | редактирование |
 | Approval | — | — | — | **Approve обязателен** |
-| Outreach | `message_sending` | outreach | — | schedule |
+| Outreach | `outreach_send` (+ периодический `dispatch_outreach`, Phase 8.1) | outreach | — | send now / schedule, ручная отправка, события |
 | Tracking | `reply_polling`, `analytics_processing` | monitoring | классификация ответов | — |
 
 ## 3. Слои backend

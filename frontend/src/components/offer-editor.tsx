@@ -1,8 +1,10 @@
 "use client";
 
-import { AlertTriangle, CalendarClock, Check, Loader2, RefreshCw, SkipForward, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, Loader2, RefreshCw, Send, SkipForward, X } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
+import { MessagePanel } from "@/components/outreach-message";
 import { errorMessage } from "@/components/states";
 import { JobStatusBadge } from "@/components/status-badges";
 import { Badge, Button, Input, Label, Select, Textarea } from "@/components/ui";
@@ -21,6 +23,7 @@ import {
   type OfferVariant,
   type Sample,
 } from "@/lib/api/offers-hooks";
+import { useEmailAccounts, useSendOffer } from "@/lib/api/outreach-hooks";
 import { CONTACT_TYPE_LABELS } from "@/lib/contacts";
 import { formatDateTime } from "@/lib/format";
 import {
@@ -261,12 +264,16 @@ export function OfferEditor({
               <X className="size-4" aria-hidden /> Отклонить
             </Button>
           </div>
-          <p className="text-xs text-zinc-500">Подтверждение ничего не отправляет: отправка появится в следующей фазе и будет возможна только для подтверждённого текста.</p>
+          <p className="text-xs text-zinc-500">
+            Подтверждение само ничего не отправляет: после него можно отправить сейчас или запланировать — уйдёт ровно подтверждённый текст.
+          </p>
         </div>
       ) : null}
       {offer.status === "approved" || offer.status === "scheduled" ? (
-        <ScheduleControls offer={offer} />
+        <SendControls offer={offer} />
       ) : null}
+      {/* «Отменить план» above already cancels the queued message of a scheduled offer */}
+      {offer.message ? <MessagePanel message={offer.message} cancellable={offer.status !== "scheduled"} /> : null}
       {offer.status === "approved" || offer.status === "scheduled" ? (
         <Button size="sm" variant="ghost" disabled={decide.isPending} onClick={() => decide.mutate({ id: offer.id, decision: "reject", comment })}>
           <X className="size-3.5" aria-hidden /> Отклонить
@@ -274,7 +281,7 @@ export function OfferEditor({
       ) : null}
       <OfferError error={decide.error} />
 
-      {offer.status !== "draft" ? <Regenerate offer={offer} leadId={leadId} /> : null}
+      {offer.status !== "draft" && offer.status !== "sent" ? <Regenerate offer={offer} leadId={leadId} /> : null}
     </div>
   );
 }
@@ -407,33 +414,86 @@ function Recipient({
   );
 }
 
-function ScheduleControls({ offer }: { offer: Offer }) {
+/** ТЗ §24–27: «Send now» or «Schedule» an approved offer. Email leaves through an SMTP account of the workspace
+ * (opt-out footer, cooldown, daily limit); Telegram / VK / manual become a message the operator sends himself. */
+function SendControls({ offer }: { offer: Offer }) {
+  const isEmail = offer.channel === "email";
+  const accounts = useEmailAccounts(isEmail);
+  const send = useSendOffer();
   const schedule = useScheduleOffer();
   const unschedule = useUnscheduleOffer();
   const [when, setWhen] = useState(defaultScheduleInput);
+  const [accountId, setAccountId] = useState<number | null>(offer.email_account_id);
   const iso = localInputToIso(when);
+  const scheduled = offer.status === "scheduled";
+  const active = (accounts.data ?? []).filter((a) => a.status === "active");
+  const noAccount = isEmail && accounts.isSuccess && active.length === 0;
+  const pending = send.isPending || schedule.isPending || unschedule.isPending;
+  const sender = isEmail ? accountId : null;
+
   return (
-    <div className="space-y-1 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+    <div className="space-y-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
       <div className="flex flex-wrap items-end gap-2">
+        {isEmail && !scheduled ? (
+          <div>
+            <Label htmlFor={`account-${offer.id}`}>С какого аккаунта</Label>
+            <Select
+              id={`account-${offer.id}`}
+              value={accountId ?? ""}
+              disabled={pending}
+              onChange={(e) => setAccountId(e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+              className="w-60"
+            >
+              <option value="">первый активный</option>
+              {(accounts.data ?? []).map((a) => (
+                <option key={a.id} value={a.id} disabled={a.status !== "active"}>
+                  {a.name} · {a.from_email}
+                  {a.status !== "active" ? " (не активен)" : ` · осталось сегодня ${a.remaining_today}`}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+        {!scheduled ? (
+          <Button
+            disabled={pending || noAccount}
+            onClick={() => send.mutate({ id: offer.id, contentHash: offer.content_hash, emailAccountId: sender })}
+          >
+            <Send className="size-4" aria-hidden /> {isEmail ? "Отправить сейчас" : "В рассылку (отправлю сам)"}
+          </Button>
+        ) : null}
         <div>
           <Label htmlFor={`when-${offer.id}`}>Когда отправить</Label>
           <Input id={`when-${offer.id}`} type="datetime-local" value={when} onChange={(e) => setWhen(e.currentTarget.value)} className="w-56" />
         </div>
         <Button
           variant="secondary"
-          disabled={!iso || schedule.isPending}
-          onClick={() => iso && schedule.mutate({ id: offer.id, scheduledAt: iso })}
+          disabled={!iso || pending || (noAccount && !scheduled)}
+          onClick={() => iso && schedule.mutate({ id: offer.id, scheduledAt: iso, emailAccountId: scheduled ? null : sender })}
         >
-          <CalendarClock className="size-4" aria-hidden /> {offer.status === "scheduled" ? "Перенести" : "Запланировать"}
+          <CalendarClock className="size-4" aria-hidden /> {scheduled ? "Перенести" : "Запланировать"}
         </Button>
-        {offer.status === "scheduled" ? (
-          <Button variant="ghost" disabled={unschedule.isPending} onClick={() => unschedule.mutate(offer.id)}>
+        {scheduled ? (
+          <Button variant="ghost" disabled={pending} onClick={() => unschedule.mutate(offer.id)}>
             Отменить план
           </Button>
         ) : null}
       </div>
-      <p className="text-xs text-zinc-500">Сейчас время только сохраняется: отправка писем и сообщений — следующая фаза.</p>
-      <OfferError error={schedule.error ?? unschedule.error} />
+      {noAccount ? (
+        <p className="text-sm text-amber-700 dark:text-amber-400">
+          Нет активного почтового аккаунта — добавьте его в разделе{" "}
+          <Link href="/email-accounts" className="underline">
+            «Почтовые аккаунты»
+          </Link>
+          .
+        </p>
+      ) : null}
+      <p className="text-xs text-zinc-500">
+        {isEmail
+          ? "Письмо уходит ровно с подтверждённым текстом и строкой отказа от рассылки; соблюдаются пауза между письмами и дневной лимит аккаунта. Перед отправкой ещё раз проверяются подтверждение и список «Не писать»."
+          : "Для Telegram, VK и ручного канала автоматической отправки нет: сообщение появится в «Рассылке» — отправьте его сами и отметьте «Отправлено»."}
+      </p>
+      <OfferError error={send.error ?? schedule.error ?? unschedule.error} />
     </div>
   );
 }

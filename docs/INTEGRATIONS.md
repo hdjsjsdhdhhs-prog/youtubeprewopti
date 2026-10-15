@@ -42,11 +42,12 @@
 ## Email
 | Аспект | Значение |
 |---|---|
-| SMTP | aiosmtplib; TLS/STARTTLS; учётные данные — секрет |
-| API-провайдеры | Адаптер-интерфейс позволяет добавить (Postmark, SES, Mailgun, Unisender и др.) — выбор Q-006 |
+| SMTP | ✅ Phase 8.1: aiosmtplib (`providers/outreach/smtp.py`); STARTTLS / SSL / без шифрования; аккаунты — в UI «Почтовые аккаунты» (`email_accounts`), пароль — секрет (ADR-0009). Транспорт `YTL_EMAIL_TRANSPORT` = `smtp` \| `mock` (не задан → `mock` в демо-режиме, иначе `smtp`); `YTL_SMTP_TIMEOUT_SECONDS` (= 30) |
+| Лимиты и повторы | На аккаунт: лимит в день (UTC), случайная пауза между письмами; повтор временных ошибок `YTL_OUTREACH_MAX_ATTEMPTS` (= 3) с задержкой `YTL_OUTREACH_RETRY_BASE_SECONDS` × 2^(n−1) (= 120 с); автопауза после `YTL_OUTREACH_AUTOPAUSE_FAILURES` (= 5) ошибок подряд |
+| API-провайдеры | Адаптер-интерфейс (`EmailTransport`) позволяет добавить (Postmark, SES, Mailgun, Unisender и др.) — выбор Q-006 |
 | Deliverability | SPF/DKIM/DMARC домена отправителя — ответственность владельца, чек-лист в DEPLOYMENT.md |
-| Bounces/replies | IMAP-поллинг ящика ответов или webhook провайдера (Phase 8) |
-| Compliance | opt-out в каждом письме; suppression list (ADR-0010) |
+| Bounces/replies | Phase 8.1: SMTP о доставке и ответах не сообщает — отказ получателя при отправке (5xx) сразу вносит адрес в «Не писать», остальное (доставлено, ответ, bounce, opt-out) отмечает оператор. IMAP-поллинг ящика ответов / webhook провайдера — позже |
+| Compliance | opt-out в каждом письме (текст аккаунта + `List-Unsubscribe: mailto`); suppression list проверяется при постановке и прямо перед отправкой (ADR-0010) |
 
 ## VK
 | Аспект | Значение |

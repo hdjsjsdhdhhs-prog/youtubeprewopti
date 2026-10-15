@@ -25,6 +25,7 @@ import {
   MAX_INSTRUCTIONS,
   MAX_OFFER_VARIANTS,
   OFFER_STARTABLE,
+  OPEN_OFFER_STATUSES,
   STYLE_LABELS,
   offerFormErrors,
   offerRequest,
@@ -36,13 +37,12 @@ import { formatUsd } from "@/lib/prefilter";
 type LeadRef = Pick<Lead, "id" | "status">;
 
 const isConfirmationError = (e: unknown) => e instanceof ApiError && e.code === "confirmation_required";
-const OPEN = new Set(["draft", "pending_approval", "approved", "scheduled"]);
 
-/** Phase 7 on the channel card: write a personalized offer (estimate → confirmed start) and work on it. */
+/** Phase 7–8 on the channel card: write a personalized offer (estimate → confirmed start), work on it, send it. */
 export function LeadOffer({ lead }: { lead: LeadRef }) {
   const offers = useLeadOffers(lead.id);
   const latest = offers.data?.items[0];
-  const open = latest && OPEN.has(latest.status) ? latest : undefined;
+  const open = latest && OPEN_OFFER_STATUSES.has(latest.status) ? latest : undefined;
   return (
     <Card className="mt-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">

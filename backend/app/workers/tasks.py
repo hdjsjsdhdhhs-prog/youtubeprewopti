@@ -7,8 +7,10 @@ from typing import Any
 import procrastinate
 
 from app.core.config import get_settings
+from app.core.crypto import SecretCipher
 from app.core.db import get_sessionmaker
 from app.core.logging import get_logger
+from app.core.secrets import SecretStore
 from app.domains.analysis.channel_pipeline import run_channel_analysis
 from app.domains.analysis.pipeline import run_thumbnail_analysis
 from app.domains.contacts.service import run_contact_extraction
@@ -20,7 +22,9 @@ from app.domains.jobs.service import JobQueue, JobType
 from app.domains.leads.service import sync_project_leads
 from app.domains.media.service import DownloadOutcome, MetricsOutcome, ingest_thumbnail
 from app.domains.offers.pipeline import run_offer_generation
+from app.domains.outreach.dispatch import dispatch_due, send_message
 from app.providers.ai import AIProvider, open_ai_provider
+from app.providers.outreach import EmailTransport, email_transport
 from app.providers.storage import LocalFSStorage, StorageBackend
 from app.providers.thumbnails import ThumbnailFetcher, open_thumbnail_fetcher
 from app.providers.youtube import YouTubeProvider, open_youtube_provider
@@ -217,3 +221,31 @@ async def retry_stalled_jobs(context: procrastinate.JobContext, timestamp: int) 
             updated = await jobs.mark_requeued(db, [j.id for j in stalled if j.id is not None])
             await db.commit()
         log.warning("jobs.stalled_requeued", count=len(stalled), job_runs=updated)
+
+
+# A send must never run twice: one attempt per job; transient SMTP errors are re-queued by the domain
+# (``outreach_max_attempts`` with backoff) and picked up again by the dispatcher.
+@job_task(name=JobType.OUTREACH_SEND.value, queue=JobQueue.OUTREACH, max_attempts=1)
+async def outreach_send(ctx: JobRunContext) -> dict[str, Any]:
+    """params: ``{"message_id"}`` — see ``outreach.dispatch.send_message`` (all guardrails re-checked)."""
+    settings = get_settings()
+    storage: StorageBackend = ctx.resources.get("storage") or LocalFSStorage(settings.storage_path)
+    transport: EmailTransport = ctx.resources.get("email_transport") or email_transport(settings)
+    secrets = SecretStore(SecretCipher(settings.master_key.get_secret_value()))
+    return await send_message(
+        get_sessionmaker(), transport, storage, secrets, settings, int(ctx.params["message_id"])
+    )
+
+
+@queue_app.periodic(cron="* * * * *")
+@queue_app.task(
+    name="dispatch_outreach", queue=JobQueue.OUTREACH.value, queueing_lock="dispatch_outreach",
+    pass_context=True,
+)
+async def dispatch_outreach(context: procrastinate.JobContext, timestamp: int) -> None:
+    """Every minute: due queued emails → ``outreach_send`` jobs (one per account, cooldown, daily limit)."""
+    async with get_sessionmaker()() as db:
+        counts = await dispatch_due(db)
+        await db.commit()
+    if counts["enqueued"]:
+        log.info("outreach.dispatched", **counts)

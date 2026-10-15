@@ -23,12 +23,12 @@
 | argon2-cffi | 25.1.x | Passwords | Argon2id | High | bcrypt | — |
 | cryptography | 50.0.x | AES-GCM | Секреты | High | PyNaCl | — |
 | structlog | 26.1.x | Logging | JSON logs | Medium | stdlib logging + json formatter | — |
-| aiosmtplib | 5.1.x | SMTP | async email (Phase 8) | Medium | smtplib в to_thread | — |
+| aiosmtplib | 5.1.x | SMTP | async email (✅ добавлен в Phase 8.1) | Medium | smtplib в to_thread | — |
 | boto3 (optional `[s3]`) | 1.43.x | S3 storage | Только при S3 | Low | aioboto3, minio | Большой пакет — поэтому опционально |
 | telethon (optional) | 1.45.x | Telegram MTProto | Только после Q-001 | Low | Pyrogram (не поддерживается активно) | Риски ToS — ADR-0010 |
 | opencv-python-headless (deferred) | 5.0.x | Лица/салиентность | Только если понадобится (Q-009) | Low | mediapipe | ~50 МБ — не добавлять без необходимости |
 
-Dev: pytest 9.1, pytest-asyncio 1.4, respx, hypothesis, ruff 0.16, mypy 2.3.
+Dev: pytest 9.1, pytest-asyncio 1.4, respx, hypothesis, ruff 0.16, mypy 2.3, aiosmtpd 1.4 (локальный SMTP-сервер для тестов транспорта, Phase 8.1).
 
 **Отвергнуты:** google-api-python-client (тяжёлый/синхронный для 4 эндпоинтов), celery/rq/arq/dramatiq (ADR-0003), langchain (ADR-0007), python-statemachine (ADR-0011), redis.
 

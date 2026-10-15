@@ -26,6 +26,7 @@ from app.domains.offers.models import (
     OfferVariantStatus,
     OutreachChannel,
 )
+from app.domains.outreach.schemas import MessageOut
 
 Text500 = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
 Instructions = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]
@@ -162,6 +163,8 @@ class OfferOut(BaseModel):
     blockers: list[Blocker]
     can_approve: bool
     approval: ApprovalOut | None  # the latest decision
+    email_account_id: int | None  # sender for the email channel (None = first active account)
+    message: MessageOut | None  # the latest outgoing message of the offer (Phase 8)
     variants: list[OfferVariantOut]  # newest round first, then by label
     created_at: datetime
     updated_at: datetime
@@ -217,8 +220,11 @@ class OfferDecisionIn(BaseModel):
 
 
 class OfferScheduleIn(BaseModel):
+    """Queue the message for ``scheduled_at``; ``email_account_id`` — the sender (email channel)."""
+
     model_config = ConfigDict(extra="forbid")
     scheduled_at: AwareDatetime
+    email_account_id: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +271,7 @@ class QueueCard(BaseModel):
     samples: list[SampleOut]  # generated thumbnails that can be attached instead
 
 
-QueueStatus = Literal["pending_approval", "approved", "scheduled", "draft", "rejected", "failed"]
+QueueStatus = Literal["pending_approval", "approved", "scheduled", "sent", "draft", "rejected", "failed"]
 
 
 class ApprovalQueue(BaseModel):

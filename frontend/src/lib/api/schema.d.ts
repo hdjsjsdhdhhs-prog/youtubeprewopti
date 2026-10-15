@@ -1336,6 +1336,219 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/email-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Accounts */
+        get: operations["list_accounts_api_email_accounts_get"];
+        put?: never;
+        /**
+         * Create Account
+         * @description Admin. The password is encrypted (SecretStore) and never returned.
+         */
+        post: operations["create_account_api_email_accounts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/email-accounts/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Account */
+        patch: operations["update_account_api_email_accounts__account_id__patch"];
+        trace?: never;
+    };
+    "/api/email-accounts/{account_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Account
+         * @description Connect and log in to the SMTP server; nothing is sent.
+         */
+        post: operations["verify_account_api_email_accounts__account_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/email-accounts/{account_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause Account */
+        post: operations["pause_account_api_email_accounts__account_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/email-accounts/{account_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume Account
+         * @description Back to active; the failure counter is reset.
+         */
+        post: operations["resume_account_api_email_accounts__account_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/offers/{offer_id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Offer
+         * @description Queue the approved offer now (echo ``content_hash``). Email leaves with the next dispatch (≤ 1 min, the
+         *     account's pause and daily limit apply); other channels become «manual» for the operator. 409:
+         *     ``content_changed``, ``not_approved`` / ``approval_outdated``, ``offer_not_sendable`` (blockers),
+         *     ``message_exists``, ``already_sent``, ``email_account_required`` / ``email_account_inactive``.
+         */
+        post: operations["send_offer_api_offers__offer_id__send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Messages */
+        get: operations["list_messages_api_messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messages/{message_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Message */
+        get: operations["get_message_api_messages__message_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messages/{message_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Message
+         * @description Queued / manual only; the offer stays approved.
+         */
+        post: operations["cancel_message_api_messages__message_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messages/{message_id}/mark-sent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Sent
+         * @description A manual message (Telegram, VK …) was sent by the operator.
+         */
+        post: operations["mark_sent_api_messages__message_id__mark_sent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messages/{message_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Event
+         * @description delivered / opened / replied / positive_reply / negative_reply / bounced / opt_out on a sent message.
+         *     opt_out and bounced put the address on the suppression list.
+         */
+        post: operations["record_event_api_messages__message_id__events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/status": {
         parameters: {
             query?: never;
@@ -1632,6 +1845,22 @@ export interface components {
             /** Budgets */
             budgets: components["schemas"]["BudgetOut"][];
         };
+        /** AccountCheck */
+        AccountCheck: {
+            /** Ok */
+            ok: boolean;
+            /** Transport */
+            transport: string;
+            /** Error Code */
+            error_code: string | null;
+            /** Message */
+            message: string;
+        };
+        /**
+         * AccountStatus
+         * @enum {string}
+         */
+        AccountStatus: "active" | "paused" | "error";
         /**
          * ActivityLevel
          * @enum {string}
@@ -2628,6 +2857,156 @@ export interface components {
             /** Share */
             share: number;
         };
+        /**
+         * EmailAccountIn
+         * @description A new SMTP account. The password goes to the encrypted secret store and is never returned.
+         */
+        EmailAccountIn: {
+            /** Name */
+            name: string;
+            /**
+             * From Email
+             * Format: email
+             */
+            from_email: string;
+            /**
+             * From Name
+             * @default
+             */
+            from_name: string;
+            /** Reply To */
+            reply_to?: string | null;
+            /** Smtp Host */
+            smtp_host: string;
+            /**
+             * Smtp Port
+             * @default 587
+             */
+            smtp_port: number;
+            /** @default starttls */
+            smtp_security: components["schemas"]["SmtpSecurityMode"];
+            /**
+             * Smtp Username
+             * @default
+             */
+            smtp_username: string;
+            /** Password */
+            password?: string | null;
+            /**
+             * Daily Limit
+             * @default 20
+             */
+            daily_limit: number;
+            /**
+             * Cooldown Min Seconds
+             * @default 60
+             */
+            cooldown_min_seconds: number;
+            /**
+             * Cooldown Max Seconds
+             * @default 180
+             */
+            cooldown_max_seconds: number;
+            /**
+             * Opt Out Text
+             * @default Если вы не хотите получать от меня письма, просто ответьте «нет» — я больше не напишу.
+             *     If you'd rather not hear from me, just reply "no" and I won't write again.
+             */
+            opt_out_text: string;
+        };
+        /** EmailAccountOut */
+        EmailAccountOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** From Email */
+            from_email: string;
+            /** From Name */
+            from_name: string;
+            /** Reply To */
+            reply_to: string | null;
+            /** Smtp Host */
+            smtp_host: string;
+            /** Smtp Port */
+            smtp_port: number;
+            smtp_security: components["schemas"]["SmtpSecurityMode"];
+            /** Smtp Username */
+            smtp_username: string;
+            /** Password Configured */
+            password_configured: boolean;
+            /** Password Hint */
+            password_hint: string | null;
+            status: components["schemas"]["AccountStatus"];
+            /** Paused Reason */
+            paused_reason: string | null;
+            /** Daily Limit */
+            daily_limit: number;
+            /** Sent Today */
+            sent_today: number;
+            /** Remaining Today */
+            remaining_today: number;
+            /** Cooldown Min Seconds */
+            cooldown_min_seconds: number;
+            /** Cooldown Max Seconds */
+            cooldown_max_seconds: number;
+            /** Next Send At */
+            next_send_at: string | null;
+            /** Opt Out Text */
+            opt_out_text: string;
+            /** Consecutive Failures */
+            consecutive_failures: number;
+            /** Bounces */
+            bounces: number;
+            /** Replies */
+            replies: number;
+            /** Opt Outs */
+            opt_outs: number;
+            /** Last Sent At */
+            last_sent_at: string | null;
+            /** Last Error Code */
+            last_error_code: string | null;
+            /** Last Error Message */
+            last_error_message: string | null;
+            /** Last Checked At */
+            last_checked_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * EmailAccountPatch
+         * @description Only the fields sent change; ``password`` replaces the stored one.
+         */
+        EmailAccountPatch: {
+            /** Name */
+            name?: string | null;
+            /** From Email */
+            from_email?: string | null;
+            /** From Name */
+            from_name?: string | null;
+            /** Reply To */
+            reply_to?: string | null;
+            /** Smtp Host */
+            smtp_host?: string | null;
+            /** Smtp Port */
+            smtp_port?: number | null;
+            smtp_security?: components["schemas"]["SmtpSecurityMode"] | null;
+            /** Smtp Username */
+            smtp_username?: string | null;
+            /** Password */
+            password?: string | null;
+            /** Daily Limit */
+            daily_limit?: number | null;
+            /** Cooldown Min Seconds */
+            cooldown_min_seconds?: number | null;
+            /** Cooldown Max Seconds */
+            cooldown_max_seconds?: number | null;
+            /** Opt Out Text */
+            opt_out_text?: string | null;
+        };
         /** EnqueueResult */
         EnqueueResult: {
             job: components["schemas"]["JobRunOut"] | null;
@@ -3552,12 +3931,134 @@ export interface components {
              */
             note: string;
         };
+        /** MarkSentIn */
+        MarkSentIn: {
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
         /** MeResponse */
         MeResponse: {
             user: components["schemas"]["UserOut"];
             workspace: components["schemas"]["WorkspaceOut"];
             role: components["schemas"]["WorkspaceRole"];
         };
+        /** MessageEventIn */
+        MessageEventIn: {
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "delivered" | "opened" | "replied" | "positive_reply" | "negative_reply" | "bounced" | "opt_out";
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** MessageEventOut */
+        MessageEventOut: {
+            /** Id */
+            id: number;
+            type: components["schemas"]["MessageEventType"];
+            /** Note */
+            note: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** User Id */
+            user_id: number | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+        };
+        /**
+         * MessageEventType
+         * @enum {string}
+         */
+        MessageEventType: "sent" | "delivered" | "opened" | "replied" | "positive_reply" | "negative_reply" | "bounced" | "opt_out" | "failed" | "cancelled";
+        /** MessageList */
+        MessageList: {
+            /** Items */
+            items: components["schemas"]["MessageOut"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+        };
+        /** MessageOut */
+        MessageOut: {
+            /** Id */
+            id: number;
+            /** Lead Id */
+            lead_id: number;
+            /** Offer Id */
+            offer_id: number;
+            /** Channel Id */
+            channel_id: number;
+            /** Channel Title */
+            channel_title: string;
+            channel: components["schemas"]["OutreachChannel"];
+            status: components["schemas"]["MessageStatus"];
+            /** Email Account Id */
+            email_account_id: number | null;
+            /** Email Account Name */
+            email_account_name: string | null;
+            /** Contact Id */
+            contact_id: number | null;
+            /** Contact Type */
+            contact_type: string;
+            /** To Address */
+            to_address: string;
+            /** Subject */
+            subject: string;
+            /** Body */
+            body: string;
+            /** Attachment Url */
+            attachment_url: string | null;
+            /** Content Hash */
+            content_hash: string;
+            /** Attempts */
+            attempts: number;
+            /**
+             * Scheduled At
+             * Format: date-time
+             */
+            scheduled_at: string;
+            /** Next Attempt At */
+            next_attempt_at: string | null;
+            /** Sent At */
+            sent_at: string | null;
+            /** Provider Message Id */
+            provider_message_id: string | null;
+            /** Error Code */
+            error_code: string | null;
+            /** Error Message */
+            error_message: string | null;
+            /** Events */
+            events: components["schemas"]["MessageEventOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * MessageStatus
+         * @enum {string}
+         */
+        MessageStatus: "queued" | "sending" | "sent" | "failed" | "cancelled" | "manual";
         /**
          * MetricBounds
          * @description Ranges over ``image_metrics`` (see ``app.domains.media.imaging`` for scales).
@@ -3786,6 +4287,9 @@ export interface components {
             /** Can Approve */
             can_approve: boolean;
             approval: components["schemas"]["ApprovalOut"] | null;
+            /** Email Account Id */
+            email_account_id: number | null;
+            message: components["schemas"]["MessageOut"] | null;
             /** Variants */
             variants: components["schemas"]["OfferVariantOut"][];
             /**
@@ -3815,13 +4319,18 @@ export interface components {
             /** Fixes */
             fixes: string[];
         };
-        /** OfferScheduleIn */
+        /**
+         * OfferScheduleIn
+         * @description Queue the message for ``scheduled_at``; ``email_account_id`` — the sender (email channel).
+         */
         OfferScheduleIn: {
             /**
              * Scheduled At
              * Format: date-time
              */
             scheduled_at: string;
+            /** Email Account Id */
+            email_account_id?: number | null;
         };
         /** OfferStart */
         OfferStart: {
@@ -3858,7 +4367,7 @@ export interface components {
          * OfferStatus
          * @enum {string}
          */
-        OfferStatus: "draft" | "pending_approval" | "approved" | "scheduled" | "rejected" | "failed";
+        OfferStatus: "draft" | "pending_approval" | "approved" | "scheduled" | "rejected" | "failed" | "sent";
         /**
          * OfferStructure
          * @description ТЗ §20: OBSERVATION → PROBLEM → SPECIFIC INSIGHT → VALUE → FREE SAMPLE → LOW-FRICTION CTA.
@@ -4681,6 +5190,17 @@ export interface components {
          * @enum {string}
          */
         SearchType: "video" | "channel";
+        /**
+         * SendIn
+         * @description «Send now»: echo ``content_hash`` of the approved offer on screen. ``email_account_id`` — the sender
+         *     for the email channel (default: the offer's, else the first active account).
+         */
+        SendIn: {
+            /** Content Hash */
+            content_hash: string;
+            /** Email Account Id */
+            email_account_id?: number | null;
+        };
         /** SetStatusAction */
         SetStatusAction: {
             /**
@@ -4695,6 +5215,11 @@ export interface components {
              */
             reason: string;
         };
+        /**
+         * SmtpSecurityMode
+         * @enum {string}
+         */
+        SmtpSecurityMode: "starttls" | "ssl" | "none";
         /**
          * SortOrder
          * @enum {string}
@@ -7924,7 +8449,7 @@ export interface operations {
     approval_queue_api_approval_queue_get: {
         parameters: {
             query?: {
-                status?: "pending_approval" | "approved" | "scheduled" | "draft" | "rejected" | "failed";
+                status?: "pending_approval" | "approved" | "scheduled" | "sent" | "draft" | "rejected" | "failed";
                 project_id?: number | null;
                 limit?: number;
                 offset?: number;
@@ -8060,6 +8585,388 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_accounts_api_email_accounts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailAccountOut"][];
+                };
+            };
+        };
+    };
+    create_account_api_email_accounts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailAccountIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailAccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_account_api_email_accounts__account_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailAccountPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailAccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_account_api_email_accounts__account_id__verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountCheck"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_account_api_email_accounts__account_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailAccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_account_api_email_accounts__account_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailAccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_offer_api_offers__offer_id__send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_messages_api_messages_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["MessageStatus"] | null;
+                lead_id?: number | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_message_api_messages__message_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_message_api_messages__message_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_sent_api_messages__message_id__mark_sent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkSentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_event_api_messages__message_id__events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageEventIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
             };
             /** @description Validation Error */
             422: {

@@ -310,7 +310,7 @@ async def test_job_writes_drafts_checks_them_and_queues_the_offer(
     assert set(card["thumbnail"]["problem_codes"]) == {"small_text", "cluttered"}
     assert card["analysis"]["problem_codes"] and card["contacts"] == []
     assert (await client.get("/api/approval-queue", params={"status": "approved"})).json()["total"] == 0
-    assert (await client.get("/api/approval-queue", params={"status": "sent"})).status_code == 422
+    assert (await client.get("/api/approval-queue", params={"status": "bogus"})).status_code == 422
 
 
 async def test_failed_drafts_mark_the_offer_failed(client, db, sessions, settings, lead, auth):
@@ -418,18 +418,31 @@ async def test_schedule_needs_the_current_approval(client, db, sessions, setting
     assert past.status_code == 400 and past.json()["error"]["code"] == "invalid_schedule"
     naive = await client.post(url, headers=auth, json={"scheduled_at": "2030-01-01T00:00:00"})
     assert naive.status_code == 422
+    # Phase 8: scheduling queues the real email, so a sender account is required
+    no_account = await client.post(url, headers=auth, json={"scheduled_at": soon})
+    assert no_account.status_code == 409 and no_account.json()["error"]["code"] == "email_account_required"
+    account = await client.post(
+        "/api/email-accounts", headers=auth,
+        json={"name": "Main", "from_email": "me@example.com", "smtp_host": "smtp.example.com",
+              "password": "pw"},
+    )
+    assert account.status_code == 201, account.text
     s = (await client.post(url, headers=auth, json={"scheduled_at": soon})).json()
     assert s["status"] == "scheduled" and s["scheduled_at"]
+    assert s["message"]["status"] == "queued" and s["message"]["email_account_id"] == account.json()["id"]
     assert (await db.get(Lead, lead.id)).status == LeadStatus.SCHEDULED
 
-    # editing a scheduled offer: back to the queue, the time is cleared, approve again
+    # editing a scheduled offer: back to the queue, the time is cleared, the queued email is cancelled
     e = (await client.patch(f"/api/offers/{o['id']}", headers=auth, json={"cta": "Интересно?"})).json()
     assert e["status"] == "pending_approval" and e["scheduled_at"] is None and e["manually_edited"]
+    assert e["message"]["status"] == "cancelled"
     assert (await db.get(Lead, lead.id)).status == LeadStatus.PENDING_APPROVAL
     e = (await _approve(client, e, auth)).json()
-    assert (await client.post(url, headers=auth, json={"scheduled_at": soon})).status_code == 200
+    again = await client.post(url, headers=auth, json={"scheduled_at": soon})
+    assert again.status_code == 200 and again.json()["message"]["status"] == "queued"
     un = await client.delete(url, headers=auth)
     assert un.status_code == 200 and un.json()["status"] == "approved" and un.json()["scheduled_at"] is None
+    assert un.json()["message"]["status"] == "cancelled"
     assert (await client.delete(url, headers=auth)).status_code == 409
 
 

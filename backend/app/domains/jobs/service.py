@@ -44,6 +44,7 @@ class JobType(StrEnum):
     THUMBNAIL_GENERATION = "thumbnail_generation"
     CONTACT_EXTRACTION = "contact_extraction"
     OFFER_GENERATION = "offer_generation"
+    OUTREACH_SEND = "outreach_send"
 
 
 # Composite literal matches procrastinate_job_to_defer_v1

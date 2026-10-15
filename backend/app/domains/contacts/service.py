@@ -535,6 +535,7 @@ async def _suppress(
     normalized: str,
     reason: SuppressionReason,
     note: str = "",
+    source_message_id: int | None = None,
 ) -> bool:
     inserted = await db.scalar(
         insert(SuppressionEntry)
@@ -545,11 +546,47 @@ async def _suppress(
             reason=reason,
             note=note,
             created_by=actor_id,
+            source_message_id=source_message_id,
         )
         .on_conflict_do_nothing(index_elements=["workspace_id", "type", "value_normalized"])
         .returning(SuppressionEntry.id)
     )
     return inserted is not None
+
+
+async def suppress_after_message(
+    db: AsyncSession,
+    workspace_id: int,
+    actor_id: int | None,
+    contact_id: int,
+    reason: SuppressionReason,
+    message_id: int,
+    note: str = "",
+) -> None:
+    """Outreach (Phase 8): a hard bounce or an opt-out reply puts the value on the suppression list (linked to
+    the message) and marks the contact for this workspace; the affected leads are rescored."""
+    row = await db.scalar(select(Contact).where(Contact.id == contact_id))
+    if row is None:
+        return
+    await _suppress(db, workspace_id, actor_id, row.type, row.value_normalized, reason, note, message_id)
+    status = ContactStatus.OPTED_OUT if reason == SuppressionReason.OPT_OUT else ContactStatus.INVALID
+    if row.workspace_id == workspace_id:
+        row.status = status
+    else:
+        state = await db.get(ContactState, (workspace_id, contact_id))
+        if state is None:
+            db.add(ContactState(workspace_id=workspace_id, contact_id=contact_id, status=status, note=note,
+                                user_id=actor_id))
+        elif state.status != ContactStatus.OPTED_OUT:
+            state.status = status
+            state.user_id = actor_id
+    await db.flush()
+    await audit(
+        db, "contact.suppressed_by_message", workspace_id=workspace_id, actor_user_id=actor_id,
+        entity_type="contact", entity_id=contact_id,
+        diff={"reason": reason.value, "message_id": message_id, "note": note},
+    )
+    await _rescore(db, workspace_id, await _channels_with_value(db, row.type, row.value_normalized))
 
 
 async def set_contact_status(

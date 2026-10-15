@@ -23,6 +23,7 @@ export const OFFER_STATUS_LABELS: Record<OfferStatus, string> = {
   pending_approval: "ждёт подтверждения",
   approved: "подтверждён",
   scheduled: "запланирован",
+  sent: "отправлен",
   rejected: "отклонён",
   failed: "не получился",
 };
@@ -32,12 +33,24 @@ export const OFFER_STATUS_TONES: Record<OfferStatus, "neutral" | "green" | "blue
   pending_approval: "amber",
   approved: "green",
   scheduled: "violet",
+  sent: "blue",
   rejected: "neutral",
   failed: "red",
 };
 
 /** Tabs of the Approval Queue, in this order. */
-export const QUEUE_TABS: readonly OfferStatus[] = ["pending_approval", "approved", "scheduled", "draft", "rejected", "failed"];
+export const QUEUE_TABS: readonly OfferStatus[] = [
+  "pending_approval",
+  "approved",
+  "scheduled",
+  "sent",
+  "draft",
+  "rejected",
+  "failed",
+];
+
+/** Offers shown on the channel card instead of the «write an offer» form (a sent offer is final). */
+export const OPEN_OFFER_STATUSES: ReadonlySet<OfferStatus> = new Set(["draft", "pending_approval", "approved", "scheduled", "sent"]);
 
 export const VARIANT_STATUS_LABELS: Record<OfferVariantStatus, string> = {
   pending: "пишется",
@@ -113,6 +126,19 @@ export function formatPersonalization(score: string | number | null | undefined)
 
 export function isOfferActive(o: { status: OfferStatus; job: { status: string } | null }): boolean {
   return o.status === "draft" && !!o.job && ["queued", "running", "retrying"].includes(o.job.status);
+}
+
+/** Poll the offer while drafts are written or its message is due / being sent (the dispatcher runs every minute);
+ * a message queued for later does not keep the page polling. */
+export function offerNeedsPolling(
+  o: { status: OfferStatus; job: { status: string } | null; message: { status: string; scheduled_at: string; next_attempt_at: string | null } | null },
+  now = Date.now(),
+): boolean {
+  if (isOfferActive(o)) return true;
+  const m = o.message;
+  if (!m) return false;
+  if (m.status === "sending") return true;
+  return m.status === "queued" && Date.parse(m.next_attempt_at ?? m.scheduled_at) <= now;
 }
 
 export function canEditOffer(status: OfferStatus): boolean {
@@ -245,6 +271,15 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_schedule: "Время отправки должно быть в будущем.",
   variant_not_ready: "Можно выбрать или править только готовый черновик.",
   ai_not_configured: "Модель для текста не настроена: задайте YTL_VIBECODE_API_KEY (или YTL_AI_PROVIDER=mock для демо).",
+  // Phase 8 (outreach)
+  offer_not_sendable: "Оффер нельзя отправить: контакт, канал или текст больше не подходят — проверьте причины.",
+  message_exists: "Сообщение по этому офферу уже в очереди.",
+  already_sent: "Этот текст уже отправлен (или отправляется) этому контакту — повторно не отправляется.",
+  message_sending: "Сообщение отправляется прямо сейчас — дождитесь результата.",
+  message_status: "Действие недоступно в текущем статусе сообщения.",
+  email_account_required: "Нет активного почтового аккаунта: добавьте SMTP-аккаунт в разделе «Почтовые аккаунты».",
+  email_account_inactive: "Выбранный почтовый аккаунт на паузе или с ошибкой входа — возобновите его или выберите другой.",
+  invalid_cooldown: "Максимальная пауза между письмами не может быть меньше минимальной.",
 };
 
 export function offerErrorMessage(error: unknown): string | null {

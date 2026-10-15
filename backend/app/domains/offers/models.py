@@ -49,9 +49,10 @@ class OfferStatus(StrEnum):
     DRAFT = "draft"  # drafts are being generated
     PENDING_APPROVAL = "pending_approval"  # in the Approval Queue
     APPROVED = "approved"  # a human approved exactly the current content
-    SCHEDULED = "scheduled"  # approved + a send time (sending itself: Phase 8)
+    SCHEDULED = "scheduled"  # approved + a message queued for a send time (or waiting for the operator)
     REJECTED = "rejected"  # the owner rejected the offer («Regenerate» reopens it)
     FAILED = "failed"  # no draft could be generated («Regenerate» reopens it)
+    SENT = "sent"  # the message went out (Phase 8): final
 
 
 _O = OfferStatus
@@ -62,10 +63,12 @@ OFFER_MACHINE: StateMachine[OfferStatus] = StateMachine(
         _O.DRAFT: {_O.PENDING_APPROVAL, _O.FAILED},
         _O.PENDING_APPROVAL: {_O.APPROVED, _O.REJECTED, _O.DRAFT},
         # editing approved content invalidates the approval => back to the queue
-        _O.APPROVED: {_O.SCHEDULED, _O.PENDING_APPROVAL, _O.REJECTED, _O.DRAFT},
-        _O.SCHEDULED: {_O.APPROVED, _O.PENDING_APPROVAL, _O.REJECTED, _O.DRAFT},
+        _O.APPROVED: {_O.SCHEDULED, _O.PENDING_APPROVAL, _O.REJECTED, _O.DRAFT, _O.SENT},
+        # SCHEDULED → APPROVED: the queued message was cancelled or failed (send again later)
+        _O.SCHEDULED: {_O.APPROVED, _O.PENDING_APPROVAL, _O.REJECTED, _O.DRAFT, _O.SENT},
         _O.REJECTED: {_O.DRAFT},
         _O.FAILED: {_O.DRAFT},
+        _O.SENT: set(),
     },
 )
 
@@ -153,6 +156,8 @@ class Offer(IdMixin, TimestampMixin, Base):
     attachment_variant_id: Mapped[int | None] = mapped_column(
         ForeignKey("generated_thumbnails.id", ondelete="SET NULL")
     )
+    # sender for the email channel (Phase 8); None = the workspace's first active account at send time
+    email_account_id: Mapped[int | None] = mapped_column(ForeignKey("email_accounts.id", ondelete="SET NULL"))
     manually_edited: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )

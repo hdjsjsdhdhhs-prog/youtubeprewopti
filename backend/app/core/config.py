@@ -83,6 +83,14 @@ class Settings(BaseSettings):
     # Channels fetched more recently than this are not re-fetched by discovery (saves quota).
     youtube_channel_refresh_hours: int = 24
 
+    # Outreach (Phase 8, ADR-0010): "smtp" sends real email through the workspace's SMTP accounts, "mock"
+    # records the message offline (demo / tests). Unset => "mock" in demo mode, otherwise "smtp".
+    email_transport: Literal["smtp", "mock"] | None = None
+    smtp_timeout_seconds: float = 30.0
+    outreach_max_attempts: int = 3  # sends of one message (transient SMTP errors), then it fails
+    outreach_retry_base_seconds: int = 120  # wait before a retry = base * 2**(attempt - 1)
+    outreach_autopause_failures: int = 5  # consecutive failed sends => the account is paused
+
     # Worker (Procrastinate, ADR-0003)
     worker_concurrency: int = 2
     worker_retry_max_attempts: int = 5  # total runs, including the first one
@@ -99,7 +107,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "youtube_api_key", "openai_api_key", "vibecode_api_key", "thumbnail_fetcher", "youtube_provider",
-        "ai_provider",
+        "ai_provider", "email_transport",
         "openai_vision_model", mode="before",
     )
     @classmethod
@@ -123,6 +131,12 @@ class Settings(BaseSettings):
         if self.demo_mode:
             return "mock"
         return "api" if self.youtube_api_key is not None else None
+
+    @property
+    def effective_email_transport(self) -> Literal["smtp", "mock"]:
+        if self.email_transport is not None:
+            return self.email_transport
+        return "mock" if self.demo_mode else "smtp"
 
     @property
     def effective_ai_provider(self) -> Literal["vibecode", "openai", "mock"] | None:

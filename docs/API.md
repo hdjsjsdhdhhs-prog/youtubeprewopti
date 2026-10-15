@@ -26,8 +26,8 @@ REST API на FastAPI. Базовый префикс — `/api`. Машиноч�
 |---|---|---|
 | `read` | viewer | все `GET`; личное избранное (`PUT/DELETE /api/favorites/*`) |
 | `write` | operator | создание/изменение/удаление проектов и запросов, постановка и отмена задач |
-| `outreach_send` | operator | одобрение/отправка (следующие фазы) |
-| `manage_integrations` | admin | реестр AI-моделей (`PATCH /api/ai/models/*`), бюджеты (`POST/PATCH/DELETE /api/budgets`), веса баллов (`PUT /api/scoring-profiles/*`); в таблице ниже — «admin» |
+| `outreach_send` | operator | Approve / Schedule оффера, «Отправить» (`POST /api/offers/{id}/send`), отмена и «отправлено» у сообщений (Phase 7–8) |
+| `manage_integrations` | admin | реестр AI-моделей (`PATCH /api/ai/models/*`), бюджеты (`POST/PATCH/DELETE /api/budgets`), веса баллов (`PUT /api/scoring-profiles/*`), почтовые аккаунты (`POST/PATCH /api/email-accounts*`, Phase 8); в таблице ниже — «admin» |
 | `manage_members` | admin | следующие фазы |
 
 Порядок ролей: `viewer < operator < admin < owner`. Недостаточно прав → `403 forbidden`.
@@ -498,7 +498,8 @@ Lead Score каналов с этим изображением, ручные `to
 
 ### Офферы и Approval Queue (Phase 7, ТЗ §20–23, §28)
 
-Ничего не отправляется: Approve и Schedule только записывают решение человека, привязанное к точному содержимому.
+Approve записывает решение человека, привязанное к точному содержимому, и сам ничего не отправляет; с Phase 8 Schedule
+ставит сообщение в очередь (см. «Рассылка (Phase 8.1)»).
 
 - `POST /api/leads/{id}/offer/estimate` (viewer+) `OfferIn {variant_count 1–3 = 3, instructions ≤ 2000, template_id?,
   language? (ru, en, pt-BR …), attach_sample = true, attachment_variant_id?}` → `OfferEstimate`: `inputs` (пронумерованные
@@ -521,14 +522,65 @@ Lead Score каналов с этим изображением, ручные `to
   409 `offer_not_approvable` с `details.blockers` (`no_variant`, `guard_issues`, `contact_required`,
   `contact_unusable`, `channel_required`, `channel_mismatch`, `lead_closed`, `status`). reject — из pending /
   approved / scheduled; skip — только pending (оффер уходит в конец очереди).
-- `POST /api/offers/{id}/schedule` (`outreach_send`) `{scheduled_at: aware datetime в будущем}` — только approved /
-  scheduled и только при действующем approval (409 `not_approved` / `approval_outdated`); `DELETE` — снять план.
-- `GET /api/approval-queue?status=pending_approval|approved|scheduled|draft|rejected|failed&project_id&limit≤100&offset`
+- `POST /api/offers/{id}/schedule` (`outreach_send`) `{scheduled_at: aware datetime в будущем, email_account_id?}` —
+  только approved / scheduled и только при действующем approval (409 `not_approved` / `approval_outdated`). С Phase 8
+  создаёт сообщение (`OfferOut.message`): email — `queued` на это время, остальные каналы — `manual`; повторный
+  вызов переносит время уже стоящего в очереди сообщения (`email_account_id` тогда не меняется). 409 также
+  `email_account_required` / `email_account_inactive`, `message_sending`, `already_sent`. `DELETE` — снять план и
+  отменить сообщение (оффер снова approved). Правка / Reject оффера тоже отменяют стоящее в очереди сообщение
+  (409 `message_sending`, если оно отправляется прямо сейчас).
+- `GET /api/approval-queue?status=pending_approval|approved|scheduled|sent|draft|rejected|failed&project_id&limit≤100&offset`
   → `ApprovalQueue {items: QueueCard[], total, counts}`; карточка: `offer`, `channel`, `lead` (Lead / Priority /
   Contactability Score), `thumbnail` (превью, которое переделывал образец, иначе самое слабое), `analysis`, `contacts`,
   `samples`. Ожидающие: непропущенные первыми, затем по Priority Score. Лиды rejected / opted_out не показываются.
 - `GET /api/offer-templates` (последние версии), `POST` `{name, body}`, `PUT /{id}` — новая версия того же шаблона
   (офферы сохраняют свою), `DELETE /{id}` — архив всех версий.
+
+### Рассылка (Phase 8.1, ТЗ §24–27, §59; ADR-0010)
+
+Сообщение создаётся только из **подтверждённого** оффера с действующим approval; все guardrails — в домене
+`outreach`, не в транспорте, и повторно проверяются прямо перед отправкой (`outreach/dispatch.py`). Email уходит через
+SMTP-аккаунт workspace; Telegram / VK / «вручную» — статус `manual`, оператор отправляет сам (автоматического
+провайдера нет, Q-001). SMTP не сообщает о доставке, открытиях и ответах — их записывает оператор.
+
+**Почтовые аккаунты** (чтение — viewer+, изменение — admin `manage_integrations`):
+- `GET /api/email-accounts` → `EmailAccountOut[]`: сервер, отправитель, `password_configured` / `password_hint`
+  (маска, пароль не возвращается никогда), `status` (`active` | `paused` | `error`), `paused_reason`, `daily_limit`,
+  `sent_today` / `remaining_today` (UTC-сутки), `cooldown_min_seconds` / `cooldown_max_seconds`, `next_send_at`,
+  `opt_out_text`, `consecutive_failures`, счётчики `bounces` / `replies` / `opt_outs` (из событий), последняя ошибка.
+- `POST /api/email-accounts` `EmailAccountIn {name, from_email, from_name = "", reply_to?, smtp_host, smtp_port = 587,
+  smtp_security = starttls | ssl | none, smtp_username = "", password?, daily_limit 1–500 = 20, cooldown_min_seconds
+  = 60, cooldown_max_seconds = 180 (≥ min, ≤ 86 400), opt_out_text}` → 201. Пароль шифруется в `secrets`
+  (ADR-0009). `PATCH /{id}` `EmailAccountPatch` — только переданные поля, `password` заменяет сохранённый,
+  `reply_to: null` снимает; 400 `invalid_cooldown`.
+- `POST /{id}/verify` → `AccountCheck {ok, transport (smtp | mock), error_code, message}` — подключение и вход без
+  отправки; успех снимает статус `error`. `POST /{id}/pause`, `POST /{id}/resume` (сбрасывает счётчик ошибок).
+
+**Отправка и сообщения:**
+- `POST /api/offers/{id}/send` (`outreach_send`) `SendIn {content_hash, email_account_id?}` → 202 `MessageOut` —
+  «Отправить сейчас»: `content_hash` — тот, что на экране. Email уходит со следующим проходом диспетчера (≤ 1 мин) с
+  учётом паузы и дневного лимита аккаунта; отправитель — указанный, иначе аккаунт оффера, иначе первый активный.
+  409: `content_changed`, `not_approved` / `approval_outdated`, `offer_not_sendable` (`details.blockers` как у Approve),
+  `offer_status`, `message_exists` (уже в очереди), `already_sent` (тот же вариант + контакт + канал уже отправлен или
+  отправляется — `idempotency_key`), `email_account_required` / `email_account_inactive`.
+- `GET /api/messages?status=queued|sending|sent|failed|cancelled|manual&lead_id&limit≤200&offset` → `MessageList
+  {items, total, limit, offset, counts (по статусам в workspace)}`; новые первыми. `GET /api/messages/{id}` →
+  `MessageOut`: получатель, канал, аккаунт, ровно отправляемые тема / текст (со строкой отказа) / вложение,
+  `content_hash`, `attempts`, `scheduled_at`, `next_attempt_at` (повтор после временной ошибки), `sent_at`,
+  `provider_message_id`, ошибка, `events[]`.
+- `POST /api/messages/{id}/cancel` (`outreach_send`) — только `queued` / `manual`; оффер остаётся подтверждённым.
+  `POST /{id}/mark-sent` `{note}` — ручное сообщение отправлено оператором (оффер и лид → `sent`).
+  `POST /{id}/events` (operator+) `{type: delivered | opened | replied | positive_reply | negative_reply | bounced |
+  opt_out, note}` — только для `sent`. `bounced` / `opt_out` вносят адрес в «Не писать» (`suppression_list.source_message_id`)
+  и помечают контакт; `replied` / `positive_reply` → лид `replied`, `negative_reply` → `declined`, `opt_out` →
+  `opted_out`. 409 `message_status` — действие не подходит к статусу.
+
+**Статусы сообщения** (`MESSAGE_MACHINE`): `queued → sending → sent`; `sending → queued` (временная ошибка, повтор с
+backoff до `YTL_OUTREACH_MAX_ATTEMPTS`), `→ failed`; `queued / manual → cancelled`; `manual → sent`. Сообщение,
+застрявшее в `sending` (воркер упал во время отправки), автоматически **не** переотправляется: `failed`
+(`send_interrupted`) — проверьте «Отправленные» ящика. Отказ получателя (5xx на RCPT) — `failed` + «Не писать»;
+отказ входа — аккаунт `error`; `YTL_OUTREACH_AUTOPAUSE_FAILURES` ошибок подряд — аккаунт `paused`. Окончательная
+неудача оставляет оффер подтверждённым (можно отправить позже), лид — `failed`.
 
 ### AI: реестр моделей, расходы и бюджеты (Phase 3.3–3.4)
 

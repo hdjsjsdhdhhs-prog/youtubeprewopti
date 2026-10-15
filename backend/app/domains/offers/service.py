@@ -95,6 +95,9 @@ from app.domains.offers.schemas import (
     SampleOut,
 )
 from app.domains.offers.templates import get_template
+from app.domains.outreach import service as outreach
+from app.domains.outreach.models import MessageStatus
+from app.domains.outreach.schemas import MessageOut
 from app.domains.projects.models import ProjectChannel, ProjectNiche, SearchProject, TaxonomyNode
 from app.domains.youtube.models import Channel, Video
 from app.domains.youtube.service import image_url
@@ -858,10 +861,17 @@ async def offer_out(
         blockers=st.blockers,
         can_approve=not st.blockers,
         approval=_approval_out(latest, st.content_hash),
+        email_account_id=offer.email_account_id,
+        message=await _latest_message_out(db, offer.id),
         variants=[_variant_out(v) for v in st.variants],
         created_at=offer.created_at,
         updated_at=offer.updated_at,
     )
+
+
+async def _latest_message_out(db: AsyncSession, offer_id: int) -> MessageOut | None:
+    message = await outreach.latest_message(db, offer_id)
+    return (await outreach.messages_out(db, [message]))[0] if message is not None else None
 
 
 def _approval_out(a: Approval | None, current_hash: str) -> ApprovalOut | None:
@@ -929,6 +939,11 @@ async def edit_offer(
         )
     contacts = (await channel_contacts(db, workspace_id, lead.channel_id)).items
     before = await offer_state(db, offer, lead.status, contacts)
+    live = await outreach.active_message(db, offer.id)
+    if live is not None and live.status == MessageStatus.SENDING:
+        raise ConflictError(
+            "The message is being sent right now; wait for the result", code="message_sending"
+        )
     sent = body.model_fields_set
     changes: dict[str, Any] = {}
     selected = before.selected
@@ -1014,6 +1029,8 @@ async def edit_offer(
         OfferStatus.APPROVED,
         OfferStatus.SCHEDULED,
     ):
+        if await outreach.cancel_live_message(db, offer, actor_id, REASON_EDITED) is not None:
+            changes["message"] = "cancelled"
         move_offer(db, offer, OfferStatus.PENDING_APPROVAL, actor_id, REASON_EDITED)
         offer.scheduled_at = None
         move_lead(db, lead, LeadStatus.PENDING_APPROVAL, actor_id, REASON_EDITED)
@@ -1113,6 +1130,7 @@ async def decide_offer(
             st.content_hash,
             body.comment,
         )
+        await outreach.cancel_live_message(db, offer, actor_id, "оффер отклонён")
         move_offer(db, offer, OfferStatus.REJECTED, actor_id, body.comment or "reject")
         offer.scheduled_at = None
         if lead.status not in CLOSED_LEAD:
@@ -1169,8 +1187,9 @@ async def decide_offer(
 async def schedule_offer(
     db: AsyncSession, workspace_id: int, actor_id: int, offer_id: int, body: OfferScheduleIn
 ) -> OfferOut:
-    """Store the send time of an approved offer (sending is Phase 8). The approval must match the current
-    content and the contact must still be usable."""
+    """Queue the message of an approved offer for a time (Phase 8: email is sent by the dispatcher when due,
+    other channels wait for the operator). The approval must match the current content and the contact must
+    still be usable; scheduling again moves the queued message."""
     offer, lead = await _offer(db, workspace_id, offer_id, lock=True)
     if offer.status not in (OfferStatus.APPROVED, OfferStatus.SCHEDULED):
         raise ConflictError(
@@ -1189,9 +1208,16 @@ async def schedule_offer(
             "The offer cannot be scheduled", code="offer_not_approvable", details={"blockers": blockers}
         )
     previous = offer.scheduled_at
-    move_offer(db, offer, OfferStatus.SCHEDULED, actor_id, "schedule")
-    offer.scheduled_at = body.scheduled_at
-    move_lead(db, lead, LeadStatus.SCHEDULED, actor_id, "оффер запланирован")
+    live = await outreach.active_message(db, offer.id, lock=True)
+    if live is not None:
+        if live.status == MessageStatus.SENDING:
+            raise ConflictError("The message is being sent right now", code="message_sending")
+        live.scheduled_at = body.scheduled_at
+        offer.scheduled_at = body.scheduled_at
+    else:
+        await outreach.queue_message(
+            db, workspace_id, actor_id, offer, lead, body.scheduled_at, email_account_id=body.email_account_id
+        )
     await db.flush()
     await audit(
         db,
@@ -1215,6 +1241,7 @@ async def unschedule_offer(db: AsyncSession, workspace_id: int, actor_id: int, o
         raise ConflictError(
             "The offer is not scheduled", code="offer_status", details={"status": offer.status.value}
         )
+    await outreach.cancel_live_message(db, offer, actor_id, "планирование отменено")
     move_offer(db, offer, OfferStatus.APPROVED, actor_id, "unschedule")
     offer.scheduled_at = None
     move_lead(db, lead, LeadStatus.APPROVED, actor_id, "планирование отменено")

@@ -1,10 +1,11 @@
 "use client";
 
 /** Hooks of offers and the Approval Queue (Phase 7): estimate → confirmed start, edits, Approve / Reject / Skip /
- * Schedule, the queue and the offer templates. Nothing here sends a message. */
+ * Schedule, the queue and the offer templates. Sending itself (Phase 8) lives in `outreach-hooks.ts`; «Schedule»
+ * queues the message of an approved offer. */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
-import { isOfferActive, type OfferStatus } from "@/lib/offers";
+import { isOfferActive, offerNeedsPolling, type OfferStatus } from "@/lib/offers";
 
 import { api, unwrap, type Schemas } from "./client";
 import { qk } from "./hooks";
@@ -25,6 +26,7 @@ export type OfferTemplateIn = Schemas["OfferTemplateIn"];
 
 export const QUEUE_PAGE = 20;
 const OFFERS_POLL_MS = 2000;
+const MESSAGE_POLL_MS = 5000;
 
 export const offerKeys = {
   all: ["offers"] as const,
@@ -33,22 +35,30 @@ export const offerKeys = {
   templates: ["offer-templates"] as const,
 };
 
-/** Offers of the lead (newest first) with the channel's contacts and the samples; polls while drafts are written. */
+/** Fast while drafts are written, slower while a due message waits for the (per-minute) dispatcher. */
+function pollInterval(offers: Offer[] | undefined): number | false {
+  if (!offers) return false;
+  if (offers.some(isOfferActive)) return OFFERS_POLL_MS;
+  return offers.some((o) => offerNeedsPolling(o)) ? MESSAGE_POLL_MS : false;
+}
+
+/** Offers of the lead (newest first) with the channel's contacts and the samples; polls while drafts are written
+ * or the message is being sent. */
 export function useLeadOffers(leadId: number) {
   return useQuery({
     queryKey: offerKeys.lead(leadId),
     queryFn: () => unwrap(api.GET("/api/leads/{lead_id}/offers", { params: { path: { lead_id: leadId } } })),
-    refetchInterval: (query) => (query.state.data?.items.some(isOfferActive) ? OFFERS_POLL_MS : false),
+    refetchInterval: (query) => pollInterval(query.state.data?.items),
   });
 }
 
-/** The Approval Queue (ТЗ §22); polls while a shown offer is being drafted. */
+/** The Approval Queue (ТЗ §22); polls while a shown offer is being drafted or sent. */
 export function useApprovalQueue(status: OfferStatus, offset: number) {
   return useQuery({
     queryKey: offerKeys.queue({ status, offset }),
     queryFn: () =>
       unwrap(api.GET("/api/approval-queue", { params: { query: { status, limit: QUEUE_PAGE, offset } } })),
-    refetchInterval: (query) => (query.state.data?.items.some((c) => isOfferActive(c.offer)) ? OFFERS_POLL_MS : false),
+    refetchInterval: (query) => pollInterval(query.state.data?.items.map((c) => c.offer)),
   });
 }
 
@@ -113,26 +123,29 @@ export function useDecideOffer() {
   });
 }
 
+/** Phase 8: queues the message for `scheduledAt` (email: sent by the dispatcher when due; other channels wait for
+ * the operator). Scheduling again moves the queued message. `emailAccountId` — the sender (email channel only). */
 export function useScheduleOffer() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, scheduledAt }: { id: number; scheduledAt: string }) =>
+    mutationFn: ({ id, scheduledAt, emailAccountId }: { id: number; scheduledAt: string; emailAccountId?: number | null }) =>
       unwrap(
         api.POST("/api/offers/{offer_id}/schedule", {
           params: { path: { offer_id: id } },
-          body: { scheduled_at: scheduledAt },
+          body: emailAccountId ? { scheduled_at: scheduledAt, email_account_id: emailAccountId } : { scheduled_at: scheduledAt },
         }),
       ),
-    onSuccess: () => invalidateOffers(qc),
+    onSuccess: () => Promise.all([invalidateOffers(qc), qc.invalidateQueries({ queryKey: ["messages"] })]),
   });
 }
 
+/** Cancels the queued message as well; the offer stays approved. */
 export function useUnscheduleOffer() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) =>
       unwrap(api.DELETE("/api/offers/{offer_id}/schedule", { params: { path: { offer_id: id } } })),
-    onSuccess: () => invalidateOffers(qc),
+    onSuccess: () => Promise.all([invalidateOffers(qc), qc.invalidateQueries({ queryKey: ["messages"] })]),
   });
 }
 
