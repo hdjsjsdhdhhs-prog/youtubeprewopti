@@ -5,11 +5,13 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { LeadScoreBadge, LeadScoreBreakdown } from "@/components/lead-score";
+import { FavoriteStar, HumanScore, LeadStatusActions, LeadTagsEditor, TagChips } from "@/components/lead-workflow";
 import { EmptyState, ErrorState, InlineError, LoadingState } from "@/components/states";
 import { DemoBadge } from "@/components/status-badges";
 import { Badge, Button, Card, Input, PageHeader, Pager, Select } from "@/components/ui";
 import { LEVEL_LABELS, formatScore, opportunityTone, scoreTone } from "@/lib/analysis";
 import { LEADS_PAGE, useLeads, useProjects, useSyncLeads, useTaxonomy, type Lead } from "@/lib/api/hooks";
+import { useBulkLeads, useTags } from "@/lib/api/workflow-hooks";
 import { formatCount, formatDate } from "@/lib/format";
 import {
   ACTIVITY_LABELS,
@@ -17,6 +19,7 @@ import {
   CLEAR_LEAD_FILTERS,
   LEAD_SORTS,
   defaultLeadOrder,
+  formatLeadScore,
   LEAD_STATUSES,
   SORT_LABELS,
   STATUS_LABELS,
@@ -28,6 +31,20 @@ import {
 import { taxonomyOptions } from "@/lib/taxonomy";
 import { useUrlState, type UrlPatch } from "@/lib/url-state";
 import { cn } from "@/lib/utils";
+import {
+  BULK_STATUS_LABELS,
+  EMPTY_SELECTION,
+  MANUAL_STATUSES,
+  MAX_BULK_LEADS,
+  filtersFromQuery,
+  humanValue,
+  isSelected,
+  selectedCount,
+  selectionBody,
+  toggleOne,
+  togglePage,
+  type Selection,
+} from "@/lib/workflow";
 
 import { ScoringSettings } from "./scoring-settings";
 
@@ -38,6 +55,14 @@ export function LeadsView() {
   const sync = useSyncLeads();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const filtered = hasLeadFilters(query);
+  // The selection belongs to one set of filters: changing them (not the page or the sort) clears it.
+  const filterKey = JSON.stringify(filtersFromQuery(query));
+  const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
+  const [selectionKey, setSelectionKey] = useState(filterKey);
+  if (selectionKey !== filterKey) {
+    setSelectionKey(filterKey);
+    setSelection(EMPTY_SELECTION);
+  }
   // Any filter change starts from the first page.
   const change = useCallback(
     (patch: UrlPatch) => setParams({ ...patch, offset: "offset" in patch ? patch.offset : null }),
@@ -124,7 +149,20 @@ export function LeadsView() {
         />
       ) : (
         <>
-          <LeadsTable leads={leads.data.items} query={query} dimmed={leads.isPlaceholderData} onSort={(p) => setParams(p)} />
+          <BulkBar
+            selection={selection}
+            total={leads.data.total}
+            query={query}
+            onSelectionChange={setSelection}
+          />
+          <LeadsTable
+            leads={leads.data.items}
+            query={query}
+            dimmed={leads.isPlaceholderData}
+            onSort={(p) => setParams(p)}
+            selection={selection}
+            onSelectionChange={setSelection}
+          />
           <Pager
             offset={query.offset}
             limit={LEADS_PAGE}
@@ -137,7 +175,137 @@ export function LeadsView() {
   );
 }
 
+/** Selection summary and bulk actions (ТЗ §11): chosen rows or «all filtered» minus unticked rows. */
+function BulkBar({
+  selection,
+  total,
+  query,
+  onSelectionChange,
+}: {
+  selection: Selection;
+  total: number;
+  query: LeadQuery;
+  onSelectionChange: (s: Selection) => void;
+}) {
+  const bulk = useBulkLeads();
+  const tags = useTags();
+  const userTags = (tags.data ?? []).filter((t) => !t.is_system);
+  const [reason, setReason] = useState("");
+  const count = selectedCount(selection, total);
+  const tooMany = count > MAX_BULK_LEADS;
+  const run = (action: Parameters<typeof bulk.mutate>[0]["action"]) =>
+    bulk.mutate({ selection: selectionBody(selection, query), action });
+
+  return (
+    <div
+      className={cn(
+        "mb-2 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm",
+        count > 0
+          ? "border-blue-200 bg-blue-50/60 dark:border-blue-900 dark:bg-blue-950/30"
+          : "border-zinc-200 dark:border-zinc-800",
+      )}
+    >
+      <span className="tabular-nums">
+        {count > 0 ? (
+          <>
+            Выбрано: <b>{count}</b>
+            {selection.mode === "all" ? " (все отфильтрованные)" : null}
+          </>
+        ) : (
+          <span className="text-zinc-500">Отметьте лиды или выберите все отфильтрованные</span>
+        )}
+      </span>
+      {selection.mode === "ids" && total > 0 ? (
+        <Button size="sm" variant="ghost" onClick={() => onSelectionChange({ mode: "all", excluded: new Set() })}>
+          Выбрать все отфильтрованные ({total})
+        </Button>
+      ) : null}
+      {count > 0 ? (
+        <Button size="sm" variant="ghost" onClick={() => onSelectionChange(EMPTY_SELECTION)}>
+          <X className="size-3.5" aria-hidden /> Снять выбор
+        </Button>
+      ) : null}
+      {count > 0 ? (
+        <>
+          <span className="mx-1 h-5 w-px bg-zinc-300 dark:bg-zinc-700" aria-hidden />
+          {MANUAL_STATUSES.filter((s) => s !== "rejected").map((s) => (
+            <Button
+              key={s}
+              size="sm"
+              variant={s === "selected" ? "primary" : "secondary"}
+              disabled={bulk.isPending || tooMany}
+              onClick={() => run({ type: "set_status", status: s, reason: "" })}
+            >
+              {BULK_STATUS_LABELS[s]}
+            </Button>
+          ))}
+          <Input
+            aria-label="Причина отклонения для выбранных"
+            placeholder="причина отклонения"
+            value={reason}
+            maxLength={500}
+            onChange={(e) => setReason(e.target.value)}
+            className="h-7 w-44 text-xs"
+          />
+          <Button
+            size="sm"
+            variant="danger"
+            disabled={bulk.isPending || tooMany}
+            onClick={() => run({ type: "set_status", status: "rejected", reason: reason.trim() })}
+          >
+            {BULK_STATUS_LABELS.rejected}
+          </Button>
+          <Select
+            aria-label="Тег для выбранных"
+            value=""
+            disabled={bulk.isPending || tooMany || userTags.length === 0}
+            onChange={(e) => {
+              const [type, id] = e.target.value.split(":");
+              if (id) run({ type: type as "add_tag" | "remove_tag", tag_id: Number(id) });
+            }}
+            className="h-7 w-44 py-0 text-xs"
+          >
+            <option value="">{userTags.length ? "Тег…" : "Нет своих тегов"}</option>
+            {userTags.map((t) => (
+              <option key={`a${t.id}`} value={`add_tag:${t.id}`}>
+                + {t.name}
+              </option>
+            ))}
+            {userTags.map((t) => (
+              <option key={`r${t.id}`} value={`remove_tag:${t.id}`}>
+                − {t.name}
+              </option>
+            ))}
+          </Select>
+          <Button size="sm" variant="secondary" disabled={bulk.isPending || tooMany} onClick={() => run({ type: "favorite" })}>
+            ★ В избранное
+          </Button>
+          <Button size="sm" variant="ghost" disabled={bulk.isPending || tooMany} onClick={() => run({ type: "unfavorite" })}>
+            ☆ Из избранного
+          </Button>
+        </>
+      ) : null}
+      {tooMany ? (
+        <span className="text-xs text-red-600">Не больше {MAX_BULK_LEADS} лидов за раз — сузьте фильтры.</span>
+      ) : null}
+      {bulk.data ? (
+        <span role="status" className="text-xs text-zinc-600 dark:text-zinc-400">
+          Изменено: {bulk.data.changed} · без изменений: {bulk.data.unchanged}
+          {bulk.data.failed ? (
+            <span className="text-red-600" title={bulk.data.failures.map((f) => `#${f.lead_id}: ${f.error}`).join("\n")}>
+              {" "}
+              · не применимо: {bulk.data.failed} (переход статуса не разрешён)
+            </span>
+          ) : null}
+        </span>
+      ) : null}
+      <InlineError error={bulk.error} />
+    </div>
+  );
+}
+
 const COLUMNS: { label: string; sort?: LeadQuery["sort"]; numeric?: boolean }[] = [
+  { label: "" },
   { label: "" },
   { label: "Канал" },
   { label: "Статус" },
@@ -156,12 +324,18 @@ function LeadsTable({
   query,
   dimmed,
   onSort,
+  selection,
+  onSelectionChange,
 }: {
   leads: Lead[];
   query: LeadQuery;
   dimmed: boolean;
   onSort: (patch: UrlPatch) => void;
+  selection: Selection;
+  onSelectionChange: (s: Selection) => void;
 }) {
+  const pageIds = leads.map((l) => l.id);
+  const pageOn = pageIds.filter((id) => isSelected(selection, id)).length;
   const [open, setOpen] = useState<Set<number>>(new Set());
   const toggle = (id: number) =>
     setOpen((prev) => {
@@ -183,9 +357,20 @@ function LeadsTable({
                   key={i}
                   scope="col"
                   aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : undefined}
-                  className={cn("px-3 py-2 font-medium", c.numeric && "text-right")}
+                  className={cn("px-3 py-2 font-medium", c.numeric && "text-right", i === 0 && "w-8 px-2")}
                 >
-                  {c.sort ? (
+                  {i === 0 ? (
+                    <input
+                      type="checkbox"
+                      aria-label="Выбрать все лиды на странице"
+                      checked={pageIds.length > 0 && pageOn === pageIds.length}
+                      ref={(el) => {
+                        if (el) el.indeterminate = pageOn > 0 && pageOn < pageIds.length;
+                      }}
+                      onChange={() => onSelectionChange(togglePage(selection, pageIds))}
+                      className="size-4 align-middle"
+                    />
+                  ) : c.sort ? (
                     <button
                       type="button"
                       onClick={() => onSort(nextLeadSort(query, c.sort!))}
@@ -206,15 +391,17 @@ function LeadsTable({
         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
           {leads.map((lead) => (
             <Fragment key={lead.id}>
-              <LeadRow lead={lead} expanded={open.has(lead.id)} onToggle={() => toggle(lead.id)} />
+              <LeadRow
+                lead={lead}
+                expanded={open.has(lead.id)}
+                onToggle={() => toggle(lead.id)}
+                selected={isSelected(selection, lead.id)}
+                onSelect={() => onSelectionChange(toggleOne(selection, lead.id))}
+              />
               {open.has(lead.id) ? (
                 <tr>
                   <td colSpan={COLUMNS.length} className="bg-zinc-50/60 px-4 py-3 dark:bg-zinc-800/30">
-                    {lead.score ? (
-                      <LeadScoreBreakdown score={lead.score} />
-                    ) : (
-                      <p className="text-sm text-zinc-500">Балл ещё не посчитан — нажмите «Пересчитать».</p>
-                    )}
+                    <LeadDetails lead={lead} />
                   </td>
                 </tr>
               ) : null}
@@ -226,11 +413,98 @@ function LeadsTable({
   );
 }
 
-function LeadRow({ lead, expanded, onToggle }: { lead: Lead; expanded: boolean; onToggle: () => void }) {
+/** Expanded row: manual decision, tags, human scores (ТЗ §47) and the explainable breakdown. */
+function LeadDetails({ lead }: { lead: Lead }) {
+  const s = lead.score;
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-start gap-x-8 gap-y-2">
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Решение</p>
+          <LeadStatusActions lead={lead} />
+          {lead.rejected_reason ? (
+            <p className="mt-1 text-xs text-zinc-500">Причина отклонения: {lead.rejected_reason}</p>
+          ) : null}
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Теги</p>
+          <LeadTagsEditor lead={lead} />
+        </div>
+        {s ? (
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Моя оценка</p>
+            <HumanScore
+              target="lead"
+              targetId={lead.id}
+              field="total"
+              aiValue={s.total}
+              overrides={lead.overrides}
+              min={0}
+              max={100}
+              label="Lead Score"
+              format={formatLeadScore}
+            />
+            <HumanScore
+              target="lead"
+              targetId={lead.id}
+              field="priority_score"
+              aiValue={s.priority_score}
+              overrides={lead.overrides}
+              min={0}
+              max={100}
+              label="Приоритет"
+              format={formatLeadScore}
+            />
+          </div>
+        ) : null}
+      </div>
+      {s ? (
+        <LeadScoreBreakdown score={s} />
+      ) : (
+        <p className="text-sm text-zinc-500">Балл ещё не посчитан — нажмите «Пересчитать».</p>
+      )}
+    </div>
+  );
+}
+
+/** The value that sorts and filters: the human one where set (ТЗ §47), marked with «я». */
+function EffectiveScore({ lead, field, label }: { lead: Lead; field: "total" | "priority_score"; label?: string }) {
+  const human = humanValue(lead.overrides, field);
+  if (!human) return <LeadScoreBadge score={lead.score?.[field]} label={label} />;
+  return (
+    <span title={`Ручная оценка; AI / код: ${formatLeadScore(lead.score?.[field])}`} className="inline-flex items-center gap-1">
+      <span className="text-[10px] text-zinc-500">я</span>
+      <LeadScoreBadge score={human.human_value} label={label} />
+    </span>
+  );
+}
+
+function LeadRow({
+  lead,
+  expanded,
+  onToggle,
+  selected,
+  onSelect,
+}: {
+  lead: Lead;
+  expanded: boolean;
+  onToggle: () => void;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const c = lead.channel;
   const s = lead.score;
   return (
-    <tr className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+    <tr className={cn("hover:bg-zinc-50 dark:hover:bg-zinc-800/50", selected && "bg-blue-50/50 dark:bg-blue-950/20")}>
+      <td className="w-8 px-2">
+        <input
+          type="checkbox"
+          aria-label={`Выбрать лид «${c.title}»`}
+          checked={selected}
+          onChange={onSelect}
+          className="size-4 align-middle"
+        />
+      </td>
       <td className="w-8 px-2">
         <button
           type="button"
@@ -242,8 +516,9 @@ function LeadRow({ lead, expanded, onToggle }: { lead: Lead; expanded: boolean; 
           {expanded ? <ChevronDown className="size-4" aria-hidden /> : <ChevronRight className="size-4" aria-hidden />}
         </button>
       </td>
-      <td className="max-w-72 px-3 py-2">
+      <td className="max-w-80 px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
+          <FavoriteStar type="channel" id={c.id} on={lead.is_favorite} label={c.title} />
           {c.avatar_url ? (
             // External YouTube avatar; next/image would proxy it through the server for no benefit.
             // eslint-disable-next-line @next/next/no-img-element
@@ -251,18 +526,25 @@ function LeadRow({ lead, expanded, onToggle }: { lead: Lead; expanded: boolean; 
           ) : (
             <div className="size-8 shrink-0 rounded-full bg-zinc-200 dark:bg-zinc-700" aria-hidden />
           )}
-          <Link href={`/channels/${c.id}`} className="truncate font-medium hover:underline" title={c.title}>
-            {c.title}
-          </Link>
-          <DemoBadge show={c.is_demo} />
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <Link href={`/channels/${c.id}`} className="truncate font-medium hover:underline" title={c.title}>
+                {c.title}
+              </Link>
+              <DemoBadge show={c.is_demo} />
+            </div>
+            <TagChips tags={lead.tags} max={3} />
+          </div>
         </div>
       </td>
-      <td className="px-3 py-2 whitespace-nowrap">{STATUS_LABELS[lead.status]}</td>
-      <td className="px-3 py-2 text-right">
-        <LeadScoreBadge score={s?.total} />
+      <td className="px-3 py-2 whitespace-nowrap" title={lead.rejected_reason ?? undefined}>
+        {STATUS_LABELS[lead.status]}
       </td>
       <td className="px-3 py-2 text-right">
-        <LeadScoreBadge score={s?.priority_score} label="Priority" />
+        <EffectiveScore lead={lead} field="total" />
+      </td>
+      <td className="px-3 py-2 text-right">
+        <EffectiveScore lead={lead} field="priority_score" label="Priority" />
       </td>
       <td className="px-3 py-2 text-right tabular-nums">
         {s?.avg_thumbnail_score ? <Badge tone={scoreTone(s.avg_thumbnail_score)}>{formatScore(s.avg_thumbnail_score)}</Badge> : "—"}
@@ -308,6 +590,7 @@ const NUMBER_FILTERS: { name: NumberKey; label: string; step?: string; min: numb
 function Filters({ query, onChange, filtered }: { query: LeadQuery; onChange: (p: UrlPatch) => void; filtered: boolean }) {
   const projects = useProjects({ offset: 0 });
   const taxonomy = useTaxonomy();
+  const tags = useTags();
   const niches = useMemo(() => taxonomyOptions(taxonomy.data ?? []), [taxonomy.data]);
   const [q, setQ] = useState(query.q ?? "");
   const [syncedQ, setSyncedQ] = useState(query.q);
@@ -421,6 +704,33 @@ function Filters({ query, onChange, filtered }: { query: LeadQuery; onChange: (p
               {o.label}
             </option>
           ))}
+        </Select>
+        <Select
+          multiple
+          aria-label="Теги"
+          title="Теги (Ctrl/Cmd — несколько): лид с любым из них"
+          value={(query.tag ?? []).map(String)}
+          onChange={(e) =>
+            onChange({ tag: Array.from(e.currentTarget.selectedOptions, (o) => o.value).join(",") || null })
+          }
+          className="h-16 w-44 py-1"
+        >
+          {(tags.data ?? []).length === 0 ? <option disabled>Тегов нет</option> : null}
+          {(tags.data ?? []).map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name} ({t.leads})
+            </option>
+          ))}
+        </Select>
+        <Select
+          aria-label="Избранное"
+          value={query.favorite === undefined ? "" : String(query.favorite)}
+          onChange={(e) => onChange({ favorite: e.target.value || null })}
+          className="w-44"
+        >
+          <option value="">Избранное: все</option>
+          <option value="true">★ только избранные</option>
+          <option value="false">кроме избранных</option>
         </Select>
       </div>
     </Card>

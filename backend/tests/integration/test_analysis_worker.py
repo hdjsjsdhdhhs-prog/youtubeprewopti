@@ -93,7 +93,9 @@ async def test_worker_runs_the_confirmed_audit(committed, settings, storage):
         assert (after.items, after.already_analyzed) == (0, 3)
 
         # 3.7: the job created the project's lead, advanced it to ANALYZED and scored it
-        assert run.result["leads"] == {
+        leads_result = dict(run.result["leads"])
+        assert isinstance(leads_result.pop("system_tags_changed"), int)  # Phase 4: depends on mock scores
+        assert leads_result == {
             "leads_created": 1, "leads_analyzed": 1, "scores_changed": 1, "scores_unchanged": 0,
         }
         [lead] = list(await db.scalars(select(Lead).where(Lead.workspace_id == ws.id)))

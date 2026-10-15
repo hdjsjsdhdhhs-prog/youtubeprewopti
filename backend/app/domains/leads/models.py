@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
@@ -74,6 +75,8 @@ class Lead(IdMixin, TimestampMixin, Base):
     created_from_project_id: Mapped[int | None] = mapped_column(
         ForeignKey("search_projects.id", ondelete="SET NULL")
     )
+    # set when an operator rejects the lead (Phase 4), cleared when it leaves REJECTED
+    rejected_reason: Mapped[str | None] = mapped_column(Text)
 
 
 class LeadScore(IdMixin, TimestampMixin, Base):
@@ -127,6 +130,44 @@ class LeadStatusHistory(IdMixin, Base):
     to_status: Mapped[LeadStatus] = mapped_column(pg_enum(LeadStatus, "lead_status"), nullable=False)
     actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tags (ТЗ §36, Phase 4)
+# ---------------------------------------------------------------------------
+class TagSource(StrEnum):
+    USER = "user"  # assigned by an operator
+    SYSTEM = "system"  # assigned by a deterministic rule on every rescore (``tags.SYSTEM_TAGS``)
+
+
+class Tag(IdMixin, TimestampMixin, Base):
+    """Workspace tag. ``name_key`` (casefolded name) is unique per workspace. System tags (``system_key``
+    set) are created on demand by the rescore and are assigned only by their rules."""
+
+    __tablename__ = "tags"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name_key"),
+        UniqueConstraint("workspace_id", "system_key"),
+    )
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    name_key: Mapped[str] = mapped_column(String(60), nullable=False)
+    color: Mapped[str | None] = mapped_column(String(7))  # "#rrggbb"
+    system_key: Mapped[str | None] = mapped_column(String(40))
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+
+
+class LeadTag(Base):
+    __tablename__ = "lead_tags"
+    lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), primary_key=True)
+    tag_id: Mapped[int] = mapped_column(
+        ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    source: Mapped[TagSource] = mapped_column(pg_enum(TagSource, "lead_tag_source"), nullable=False)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )

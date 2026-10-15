@@ -24,7 +24,7 @@ REST API на FastAPI. Базовый префикс — `/api`. Машиноч�
 
 | Право | Минимальная роль | Где используется |
 |---|---|---|
-| `read` | viewer | все `GET` |
+| `read` | viewer | все `GET`; личное избранное (`PUT/DELETE /api/favorites/*`) |
 | `write` | operator | создание/изменение/удаление проектов и запросов, постановка и отмена задач |
 | `outreach_send` | operator | одобрение/отправка (следующие фазы) |
 | `manage_integrations` | admin | реестр AI-моделей (`PATCH /api/ai/models/*`), бюджеты (`POST/PATCH/DELETE /api/budgets`), веса баллов (`PUT /api/scoring-profiles/*`); в таблице ниже — «admin» |
@@ -103,6 +103,19 @@ REST API на FastAPI. Базовый префикс — `/api`. Машиноч�
 | `GET /api/leads` | read | 200 `LeadList` | Лиды workspace с Lead Score, фильтры ТЗ §9 (Phase 3.7) |
 | `GET /api/leads/{id}` | read | 200 `LeadDetail` | Лид: разбор балла по компонентам, история статусов и баллов |
 | `POST /api/leads/sync` | write | 200 `RescoreResult` | Создать недостающие лиды и пересчитать баллы (без AI) |
+| `POST /api/leads/{id}/status` | write | 200 `LeadDetail` | Ручное решение: шорт-лист / выбрать / назад / отклонить / восстановить (Phase 4) |
+| `POST /api/leads/bulk` | write | 200 `LeadBulkResult` | Одно действие над выбранными или «всеми отфильтрованными» лидами |
+| `GET /api/tags` | read | 200 `TagOut[]` | Теги workspace: системные (с правилом) и свои, число лидов |
+| `POST /api/tags` | write | 201 `TagOut` | Создать тег |
+| `PATCH /api/tags/{id}` | write | 200 `TagOut` | Переименовать / сменить цвет (системный — только цвет) |
+| `DELETE /api/tags/{id}` | write | 204 | Удалить свой тег (снимается со всех лидов) |
+| `GET /api/favorites` | read | 200 `FavoriteList` | Личное избранное: каналы и превью |
+| `PUT /api/favorites/{entity_type}/{entity_id}` | read | 200 `FavoriteState` | Добавить в избранное (идемпотентно) |
+| `DELETE /api/favorites/{entity_type}/{entity_id}` | read | 200 `FavoriteState` | Убрать из избранного (идемпотентно) |
+| `GET /api/score-overrides` | read | 200 `ScoreOverrideOut[]` | Ручные оценки объектов `target_type` + `target_id` (повторяемый) |
+| `PUT /api/score-overrides` | write | 200 `ScoreOverrideSaved` | Поставить / изменить свою оценку рядом с AI (ТЗ §47) |
+| `DELETE /api/score-overrides/{id}` | write | 200 `OverrideRemoved` | Вернуть оценку AI |
+| `GET /api/feedback/summary` | read | 200 `FeedbackSummary` | «AI vs человек»: где AI завышает / занижает, решения по лидам (§46) |
 | `GET /api/scoring-profiles/lead` | read | 200 `LeadProfileOut` | Максимумы компонентов Lead Score и ценность ниш |
 | `PUT /api/scoring-profiles/lead` | admin | 200 `LeadProfileSaved` | Новая версия весов Lead Score + пересчёт лидов |
 | `GET /api/scoring-profiles/priority` | read | 200 `PriorityProfileOut` | Веса Priority Score (§53) |
@@ -398,8 +411,10 @@ ai_not_configured`; `409 project_archived`. Задача `channel_analysis` (о�
 чужого workspace — 404.
 
 `POST /api/leads/sync` `{"project_id"?: int}` (write; без `project_id` — все проекты workspace) → `RescoreResult`
-`{"leads_created", "leads_analyzed", "scores_changed", "scores_unchanged"}`. Новая строка `lead_scores` пишется,
-только если результат изменился; прежняя остаётся историей.
+`{"leads_created", "leads_analyzed", "scores_changed", "scores_unchanged", "system_tags_changed"}` (последнее —
+Phase 4: системные теги добавлены + сняты). Новая строка `lead_scores` пишется, только если результат изменился;
+прежняя остаётся историей. Автоматический `DISCOVERED → ANALYZED` — условный UPDATE: лид, который оператор уже
+перевёл в другой статус, не трогается.
 
 Веса: `GET/PUT /api/scoring-profiles/lead` — `LeadWeights`: максимум баллов каждого компонента (0–100, хотя бы один
 > 0; Lead Score нормируется к 0–100 при любой сумме; по умолчанию 25 / 20 / 15 / 10 / 15 / 5 / 0 / 10 в порядке
@@ -418,6 +433,68 @@ name_taken`), "criteria", "is_default": true}`. `criteria` (`IdealLeadCriteria`,
 профиль `is_default` workspace (не больше одного; нет профиля — Channel Fit «нет данных»). `PATCH` — частичное
 изменение (`is_default: false` — не использовать ни один). Создание, изменение и удаление пересчитывают лиды
 (`rescored` / `RescoreResult`).
+
+### Human workflow: решения, массовые действия, теги, избранное, ручные оценки (Phase 4, ТЗ §10–11, §36–37, §46–47)
+
+`LeadOut` дополнительно содержит `rejected_reason` (пока лид `REJECTED`), `tags[]` (`LeadTagOut`: `id`, `name`,
+`color`, `is_system`, `source` = `user`\|`system`; системные первыми), `is_favorite` (канал в избранном текущего
+пользователя) и `overrides[]` (ручные `total` / `priority_score` лида). `GET /api/leads` дополнительно фильтрует по
+`tag` (можно повторять; любой из) и `favorite` (`true` / `false`); `min_lead_score`, `max_lead_score`,
+`min_priority` и сортировки `lead_score` / `priority` используют ручное значение, если оно задано.
+
+**Ручной статус.** `POST /api/leads/{id}/status` `{"status", "reason"?: str ≤ 500}` (write) → `LeadDetail`. Вручную
+ставятся только `shortlisted`, `selected`, `analyzed` (убрать из шорт-листа), `rejected`; иное → `400
+status_not_manual`. Переход проверяет state machine (ADR-0011): например, `rejected` → только `shortlisted`
+(«восстановить»), иначе `409 invalid_transition`. Повтор текущего статуса ничего не меняет. Каждое решение пишется в
+`lead_status_history` (с `actor_user_id` и причиной), в `audit_logs` (`lead.status_changed`) и в `feedback_events`
+вместе с Lead Score кода в этот момент. Статус не влияет на балл — пересчёта нет.
+
+**Массовые действия (§11).** `POST /api/leads/bulk` (write):
+
+```json
+{"selection": {"lead_ids": [1, 2]}, "action": {"type": "set_status", "status": "shortlisted", "reason": ""}}
+{"selection": {"filters": {"status": ["analyzed"], "max_thumbnail_score": 5}, "exclude_ids": [7]},
+ "action": {"type": "add_tag", "tag_id": 3}}
+```
+
+`selection` — ровно одно из `lead_ids` (1–5000) или `filters` (те же поля, что у `GET /api/leads`, «все
+отфильтрованные») минус `exclude_ids`; иначе 422. Не больше 5000 лидов → `400 selection_too_large`; чужой или
+несуществующий id в `lead_ids` → 404 (`details.lead_ids`). Действия: `set_status` (правила как выше),
+`add_tag` / `remove_tag` (только свои теги; системный → `409 system_tag`), `favorite` / `unfavorite` (каналы лидов,
+для текущего пользователя). Ответ `LeadBulkResult`: `matched`, `changed`, `unchanged` (уже в нужном состоянии),
+`failed` и `failures[]` (`lead_id`, `error`, ≤ 50) — неприменимые лиды пропускаются, остальные меняются.
+
+**Теги (§36).** `TagIn` `{"name" (1–60), "color"?: "#rrggbb"}`; имя уникально без учёта регистра и повторных
+пробелов (`409 tag_exists`). Системные теги создаются автоматически и назначаются правилами при каждом пересчёте
+лидов (без AI), их имена зарезервированы (`409 tag_reserved`): `weak-thumbnails` — средний балл превью < 5 (ручные
+оценки учитываются), `high-potential` — Lead Score ≥ 60 (ручной, если задан), `hot-lead` — то же + высокая
+активность, `visual-opportunity` — высокая визуальная возможность по аудиту канала. Системный тег можно только
+перекрасить. `TagOut`: `id`, `name`, `color`, `is_system`, `system_key`, `rule`, `leads`, `created_at`.
+
+**Избранное (§37).** Личное для пользователя (viewer тоже может). `entity_type` = `channel` (`entity_id` — канал) или
+`thumbnail` (`entity_id` — видео). Добавить можно только видимую workspace сущность (иначе 404). `GET
+/api/favorites?entity_type=&limit=&offset=` → `FavoriteList` (`items[]`: `entity_type`, `entity_id`, `created_at`,
+`channel` или `video` с `image_url`). Звёздочка превью видна в `GET /api/projects/{id}/thumbnail-analyses`
+(`items[].is_favorite`).
+
+**Ручные оценки (§47).** `PUT /api/score-overrides` `{"target_type", "target_id", "field", "human_value", "reason"?}`
+(write) — upsert, `ai_value` берёт сервер из текущего значения AI / кода, AI-значение не перезаписывается. Поля:
+`thumbnail_analysis` — `overall_score` и 11 подоценок (1–10), `channel_analysis` — `visual_consistency`,
+`outdated_style_score` (1–10), `lead` — `total`, `priority_score` (0–100); вне диапазона → `400 out_of_range`,
+другое поле → `400 invalid_field`. Ручные `overall_score` / `redesign_potential` превью заменяют AI-значения во входах
+Lead Score каналов с этим изображением, ручные `total` / `priority_score` лида — в сортировке, фильтрах и системных
+тегах; такие правки сразу пересчитывают затронутые лиды (`rescored`, иначе `null`). Правка относится к конкретному
+сохранённому аудиту: повторный анализ (новый промпт / модель) даёт новое AI-значение без ручного. `DELETE
+/api/score-overrides/{id}` — вернуть AI-значение (тоже с пересчётом). Ручные оценки показываются рядом с AI:
+`overrides[]` в `LeadOut`, в `items[]` списка аудитов превью и в `GET /api/channels/{id}/visual-audit`.
+
+**AI vs человек (§46).** `GET /api/feedback/summary` → `overrides[]` по (`target_type`, `field`): число ручных оценок,
+средние AI и человека, `avg_delta` (человек − AI; < 0 — AI завышает), `ai_overestimates` / `ai_underestimates`;
+`lead_decisions[]` — ручные решения по статусам со средним Lead Score кода в момент решения; `events` — всего событий.
+
+**Approval Queue.** Таблица `approvals` и проверка `approvals.service.require_approval` (решение привязано к SHA-256
+содержимого: изменение после approve → `409 approval_outdated`, нет approve → `409 not_approved`) готовы; эндпоинтов
+и раздела очереди пока нет — им нечего показывать до офферов (Phase 7).
 
 ### AI: реестр моделей, расходы и бюджеты (Phase 3.3–3.4)
 

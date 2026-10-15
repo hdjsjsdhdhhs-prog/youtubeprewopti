@@ -43,6 +43,10 @@ from app.domains.analysis.schemas import (
     ThumbnailAnalysisOut,
     ThumbnailPrefilter,
 )
+from app.domains.favorites.models import FavoriteEntity
+from app.domains.favorites.service import favorite_ids
+from app.domains.feedback.models import ScoreTarget
+from app.domains.feedback.service import overrides_for
 from app.domains.identity.service import audit
 from app.domains.jobs.schemas import JobRunOut
 from app.domains.jobs.service import JobQueue, JobType, enqueue_job
@@ -389,6 +393,7 @@ async def list_thumbnail_analyses(
     workspace_id: int,
     project_id: int,
     *,
+    user_id: int,
     sort: AnalysisSort,
     order: SortOrder,
     opportunity: Level | None,
@@ -427,6 +432,13 @@ async def list_thumbnail_analyses(
         filtered.add_columns(overall.label("overall")).order_by(ordered, Video.id).limit(limit).offset(offset)
     )
     fields = [k for k in ThumbnailAnalysisOut.model_fields if k != "overall_score"]
+    found = list(rows.tuples())
+    overrides = await overrides_for(
+        db, workspace_id, ScoreTarget.THUMBNAIL_ANALYSIS, [analysis.id for _, _, analysis, _ in found]
+    )
+    favorites = await favorite_ids(
+        db, workspace_id, user_id, FavoriteEntity.THUMBNAIL, [video.id for video, _, _, _ in found]
+    )
     items = [
         AnalyzedVideoOut(
             video_id=video.id, youtube_video_id=video.youtube_video_id, title=video.title,
@@ -435,8 +447,10 @@ async def list_thumbnail_analyses(
             analysis=ThumbnailAnalysisOut(
                 **{k: getattr(analysis, k) for k in fields}, overall_score=Decimal(value)
             ),
+            overrides=overrides.get(analysis.id, []),
+            is_favorite=video.id in favorites,
         )
-        for video, channel_title, analysis, value in rows.all()
+        for video, channel_title, analysis, value in found
     ]
     return ThumbnailAnalysisList(
         items=items, total=total, limit=limit, offset=offset,

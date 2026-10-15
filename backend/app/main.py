@@ -19,11 +19,14 @@ from app.api.routes import (
     analysis,
     auth,
     discovery,
+    favorites,
+    feedback,
     jobs,
     leads,
     media,
     projects,
     scoring,
+    tags,
     taxonomy,
     youtube,
 )
@@ -50,10 +53,14 @@ def create_app() -> FastAPI:
         await db.execute(text("SELECT 1"))
         return {"status": "ok", "database": "ok"}
 
-    for module in (auth, projects, taxonomy, discovery, youtube, media, analysis, scoring, leads, ai, jobs):
+    for module in (
+        auth, projects, taxonomy, discovery, youtube, media, analysis, scoring, leads, tags, favorites,
+        feedback, ai, jobs,
+    ):
         api.include_router(module.router)
     api.include_router(analysis.channel_router)
     api.include_router(leads.ideal_router)
+    api.include_router(feedback.summary_router)
     app.include_router(api)
     return app
 

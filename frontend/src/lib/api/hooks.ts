@@ -79,6 +79,15 @@ export type PriorityWeights = Schemas["PriorityWeights"];
 export type IdealLeadProfile = Schemas["IdealLeadProfileOut"];
 export type IdealLeadCriteria = Schemas["IdealLeadCriteria"];
 export type RescoreResult = Schemas["RescoreResult"];
+export type LeadTag = Schemas["LeadTagOut"];
+export type Tag = Schemas["TagOut"];
+export type LeadBulkRequest = Schemas["LeadBulkRequest"];
+export type LeadBulkResult = Schemas["LeadBulkResult"];
+export type FavoriteEntity = Schemas["FavoriteEntity"];
+export type Favorite = Schemas["FavoriteOut"];
+export type ScoreTarget = Schemas["ScoreTarget"];
+export type ScoreOverrideIn = Schemas["ScoreOverrideIn"];
+export type FeedbackSummary = Schemas["FeedbackSummary"];
 
 export const ACTIVE_JOB_STATUSES: ReadonlySet<JobStatus> = new Set(["queued", "running", "retrying"]);
 
@@ -114,6 +123,10 @@ export const qk = {
   leadProfile: ["scoring", "lead"] as const,
   priorityProfile: ["scoring", "priority"] as const,
   idealProfiles: ["ideal-lead-profiles"] as const,
+  tags: ["tags"] as const,
+  favorites: ["favorites"] as const,
+  favoriteList: (p: { entity_type?: FavoriteEntity; offset: number }) => ["favorites", "list", p] as const,
+  feedbackSummary: ["feedback", "summary"] as const,
 };
 
 // --- auth -------------------------------------------------------------------------------------

@@ -3,13 +3,16 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.core.state_machine import LeadStatus
 from app.domains.analysis.audit import Level
 from app.domains.analysis.models import ScoringKind
+from app.domains.feedback.schemas import ScoreOverrideOut
+from app.domains.leads.models import TagSource
+from app.domains.leads.results import RescoreResult
 from app.domains.leads.scoring import (
     COMPONENTS,
     DEFAULT_LEAD_WEIGHTS,
@@ -77,13 +80,6 @@ class PriorityProfileOut(BaseModel):
     version: int
     is_default: bool
     weights: PriorityWeights
-
-
-class RescoreResult(BaseModel):
-    leads_created: int  # channels of the workspace's projects that had no lead yet
-    leads_analyzed: int  # DISCOVERED → ANALYZED (thumbnails audited)
-    scores_changed: int  # leads whose score changed (a new score row)
-    scores_unchanged: int
 
 
 class LeadProfileSaved(LeadProfileOut):
@@ -165,16 +161,28 @@ class LeadScoreOut(BaseModel):
     created_at: datetime  # computed at
 
 
+class LeadTagOut(BaseModel):
+    id: int
+    name: str
+    color: str | None
+    is_system: bool
+    source: TagSource
+
+
 class LeadOut(BaseModel):
     id: int
     status: LeadStatus
     status_changed_at: datetime
     created_at: datetime
     created_from_project_id: int | None
+    rejected_reason: str | None  # set while the lead is REJECTED
     channel: ChannelOut
     activity_level: ActivityLevel | None
     visual_opportunity: Level | None  # current comparative channel audit
     score: LeadScoreOut | None  # None = not scored yet (run «Пересчитать»)
+    tags: list[LeadTagOut]  # system tags first, then by name
+    is_favorite: bool  # the channel is a favorite of the current user
+    overrides: list[ScoreOverrideOut]  # human Lead / Priority Score (ТЗ §47); the AI value stays in score
 
 
 class StatusChangeOut(BaseModel):
@@ -216,7 +224,9 @@ class LeadSort(StrEnum):
 
 class LeadFilters(BaseModel):
     """ТЗ §9: all filters AND-ed. Score filters exclude leads without a score / without audited
-    thumbnails; channel filters exclude channels without metrics (as on the channels page)."""
+    thumbnails; channel filters exclude channels without metrics (as on the channels page). Lead Score and
+    Priority filters use the human value where one is set (ТЗ §47). ``tag`` — any of the tags;
+    ``favorite`` — favorites of the current user."""
 
     model_config = ConfigDict(extra="forbid")
     project_id: int | None = None
@@ -234,7 +244,9 @@ class LeadFilters(BaseModel):
     activity: ActivityLevel | None = None  # at least this level
     max_days_since_last_upload: int | None = Field(default=None, ge=0)
     visual_opportunity: Level | None = None
-    niche: list[int] = Field(default_factory=list)
+    niche: list[int] = Field(default_factory=list, max_length=50)
+    tag: list[int] = Field(default_factory=list, max_length=50)
+    favorite: bool | None = None  # true = only favorites, false = only non-favorites
 
 
 class LeadSummary(BaseModel):
@@ -257,6 +269,107 @@ class LeadList(BaseModel):
 class LeadSyncRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     project_id: int | None = None  # None = all projects of the workspace
+
+
+# ---------------------------------------------------------------------------
+# Human workflow (Phase 4): status, bulk actions, tags
+# ---------------------------------------------------------------------------
+Reason = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
+MAX_BULK_LEADS = 5000
+
+
+class LeadStatusChange(BaseModel):
+    """Manual decision on a lead. Only ``MANUAL_STATUSES`` can be set by hand (the rest belong to
+    generation / offers / outreach); the transition must be allowed by the lead state machine."""
+
+    model_config = ConfigDict(extra="forbid")
+    status: LeadStatus
+    reason: Reason = ""  # stored in the history; for «rejected» also as ``rejected_reason``
+
+
+class LeadSelection(BaseModel):
+    """Exactly one of ``lead_ids`` (chosen rows) or ``filters`` («all filtered», ТЗ §11), the latter minus
+    ``exclude_ids`` (rows unticked after «select all»)."""
+
+    model_config = ConfigDict(extra="forbid")
+    lead_ids: list[int] | None = Field(default=None, min_length=1, max_length=MAX_BULK_LEADS)
+    filters: LeadFilters | None = None
+    exclude_ids: list[int] = Field(default_factory=list, max_length=MAX_BULK_LEADS)
+
+    @model_validator(mode="after")
+    def _one_of(self) -> LeadSelection:
+        if (self.lead_ids is None) == (self.filters is None):
+            raise ValueError("pass exactly one of lead_ids or filters")
+        return self
+
+
+class SetStatusAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["set_status"]
+    status: LeadStatus
+    reason: Reason = ""
+
+
+class TagAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["add_tag", "remove_tag"]
+    tag_id: int
+
+
+class FavoriteAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["favorite", "unfavorite"]  # the leads' channels, for the current user
+
+
+LeadBulkAction = Annotated[SetStatusAction | TagAction | FavoriteAction, Field(discriminator="type")]
+
+
+class LeadBulkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    selection: LeadSelection
+    action: LeadBulkAction
+
+
+class BulkFailure(BaseModel):
+    lead_id: int
+    error: str
+
+
+class LeadBulkResult(BaseModel):
+    matched: int  # leads in the selection
+    changed: int
+    unchanged: int  # already in the requested state
+    failed: int  # e.g. a transition the state machine does not allow
+    failures: list[BulkFailure]  # at most MAX_FAILURES_SHOWN
+
+
+TagName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
+TagColor = Annotated[str, StringConstraints(pattern=r"^#[0-9a-fA-F]{6}$")]
+
+
+class TagIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: TagName
+    color: TagColor | None = None
+
+
+class TagPatch(BaseModel):
+    """Absent field = unchanged; ``"color": null`` removes the color. System tags: only the color."""
+
+    model_config = ConfigDict(extra="forbid")
+    name: TagName | None = None
+    color: TagColor | None = None
+
+
+class TagOut(BaseModel):
+    id: int
+    name: str
+    color: str | None
+    is_system: bool
+    system_key: str | None
+    rule: str | None  # system tags: the rule that assigns them
+    leads: int  # leads of the workspace with this tag
+    created_at: datetime
 
 
 LeadDetail.model_rebuild()

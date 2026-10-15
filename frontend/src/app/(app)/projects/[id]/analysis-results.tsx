@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, ImageOff } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { FavoriteStar, HumanScore } from "@/components/lead-workflow";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { JobStatusBadge } from "@/components/status-badges";
 import { Badge, Card, Label, Pager, Select } from "@/components/ui";
@@ -229,44 +230,55 @@ function AnalysisRuns({ runs }: { runs: Job[] }) {
 function ResultRow({ item }: { item: AnalyzedVideo }) {
   const [open, setOpen] = useState(false);
   const a = item.analysis;
+  const human = item.overrides?.find((o) => o.field === "overall_score");
   return (
     <li className="rounded-md border border-zinc-200 dark:border-zinc-800">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-start gap-3 p-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-      >
-        <Thumb assetId={a.image_asset_id} title={item.title} className="w-40 shrink-0" />
-        <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 text-sm font-medium" title={item.title}>
-            {item.title}
-          </p>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            {item.channel_title} · {formatCount(item.view_count)} просм. · {formatDate(item.published_at)}
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <Badge tone={scoreTone(a.overall_score)} title="Общий балл: взвешенное среднее компонентов (считает код)">
-              {formatScore(a.overall_score)} / 10
-            </Badge>
-            <Badge tone={opportunityTone(a.improvement_opportunity)} title="Вероятный визуальный потенциал улучшения">
-              потенциал: {LEVEL_LABELS[a.improvement_opportunity]}
-            </Badge>
-            {a.problems.slice(0, 3).map((pr, i) => (
-              <Badge key={`${pr.code}-${i}`} tone={pr.severity === "high" ? "red" : "neutral"}>
-                {problemLabel(pr.code)}
+      <div className="flex items-start">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          className="flex min-w-0 flex-1 items-start gap-3 p-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+        >
+          <Thumb assetId={a.image_asset_id} title={item.title} className="w-40 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-2 text-sm font-medium" title={item.title}>
+              {item.title}
+            </p>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              {item.channel_title} · {formatCount(item.view_count)} просм. · {formatDate(item.published_at)}
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <Badge tone={scoreTone(a.overall_score)} title="Общий балл: взвешенное среднее компонентов (считает код)">
+                {formatScore(a.overall_score)} / 10
               </Badge>
-            ))}
-            {a.provider === "mock" ? <Badge tone="violet">mock</Badge> : null}
+              {human ? (
+                <Badge tone={scoreTone(human.human_value)} title="Моя оценка (учитывается в Lead Score вместо AI)">
+                  я: {formatScore(human.human_value)}
+                </Badge>
+              ) : null}
+              <Badge tone={opportunityTone(a.improvement_opportunity)} title="Вероятный визуальный потенциал улучшения">
+                потенциал: {LEVEL_LABELS[a.improvement_opportunity]}
+              </Badge>
+              {a.problems.slice(0, 3).map((pr, i) => (
+                <Badge key={`${pr.code}-${i}`} tone={pr.severity === "high" ? "red" : "neutral"}>
+                  {problemLabel(pr.code)}
+                </Badge>
+              ))}
+              {a.provider === "mock" ? <Badge tone="violet">mock</Badge> : null}
+            </div>
           </div>
+          {open ? (
+            <ChevronDown className="size-4 shrink-0 text-zinc-400" aria-hidden />
+          ) : (
+            <ChevronRight className="size-4 shrink-0 text-zinc-400" aria-hidden />
+          )}
+        </button>
+        <div className="p-2">
+          <FavoriteStar type="thumbnail" id={item.video_id} on={item.is_favorite ?? false} label={item.title} />
         </div>
-        {open ? (
-          <ChevronDown className="size-4 shrink-0 text-zinc-400" aria-hidden />
-        ) : (
-          <ChevronRight className="size-4 shrink-0 text-zinc-400" aria-hidden />
-        )}
-      </button>
-      {open ? <AuditDetails a={a} channelId={item.channel_id} /> : null}
+      </div>
+      {open ? <AuditDetails a={a} channelId={item.channel_id} overrides={item.overrides} /> : null}
     </li>
   );
 }
@@ -294,11 +306,47 @@ function Thumb({ assetId, title, className }: { assetId: number; title: string; 
   );
 }
 
-function AuditDetails({ a, channelId }: { a: ThumbnailAnalysis; channelId: number }) {
+function AuditDetails({
+  a,
+  channelId,
+  overrides,
+}: {
+  a: ThumbnailAnalysis;
+  channelId: number;
+  overrides: AnalyzedVideo["overrides"];
+}) {
   return (
     <div className="grid gap-4 border-t border-zinc-200 p-3 text-sm md:grid-cols-2 dark:border-zinc-800">
       <div>
         <p>{a.visual_summary}</p>
+        <div className="mt-2 space-y-1 rounded border border-zinc-200 p-2 dark:border-zinc-800">
+          <p className="text-xs text-zinc-500">
+            Моя оценка хранится рядом с AI и не перезаписывает её; общий балл и потенциал редизайна учитываются в Lead
+            Score канала.
+          </p>
+          <HumanScore
+            target="thumbnail_analysis"
+            targetId={a.id}
+            field="overall_score"
+            aiValue={a.overall_score}
+            overrides={overrides}
+            min={1}
+            max={10}
+            label="Общий балл"
+            format={formatScore}
+          />
+          <HumanScore
+            target="thumbnail_analysis"
+            targetId={a.id}
+            field="redesign_potential"
+            aiValue={a.redesign_potential}
+            overrides={overrides}
+            min={1}
+            max={10}
+            label="Потенциал редизайна"
+            format={formatScore}
+          />
+        </div>
         <dl className="mt-3 space-y-1">
           {SUBSCORES.map((k) => {
             const v = Number(a[k]);

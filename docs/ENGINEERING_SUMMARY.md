@@ -1,6 +1,7 @@
 # ENGINEERING SUMMARY
 
-_Обновлено: 2026-10-14 — Phase 1, 2, 3.1–3.6 закоммичены (`55c4bc8`), 3.7 (лиды и Lead Score) реализована, не закоммичена.
+_Обновлено: 2026-10-14 — Phase 1, 2, 3.1–3.7 закоммичены (`8584307`), Phase 4 (human workflow) реализована, не
+закоммичена; backend-тесты с PostgreSQL проходят (см. ниже).
 Архитектурное исследование — 2026-09-24._
 
 **PROJECT:**
@@ -233,6 +234,47 @@ vibecode для `thumbnail_analysis/v1` — **не проверены** (раз�
   домена `leads` отформатированы.
 - **Не проверено:** `next build`, сквозной прогон реальными процессами (uvicorn + воркер + `next start`), отрисовка UI в
   браузере, CI. `lead_explanation/v1` (AI-резюме лида) не реализован.
+- Закоммичено в `8584307`.
+
+**PHASE 4 — HUMAN WORKFLOW (2026-10-14):** ТЗ §10–11, §36–37, §46–47; миграция `8d1f3b6a9e42`.
+- **Ручные статусы** (`leads/workflow.py`): только shortlisted / selected / analyzed («убрать из шорт-листа») /
+  rejected (с причиной → `leads.rejected_reason`), переход через `LEAD_MACHINE` (REJECTED → только «восстановить» в
+  шорт-лист); история с актором, `audit_logs`, `feedback_events` с Lead Score кода в момент решения. Строки лидов
+  блокируются `FOR UPDATE`; автоматический `DISCOVERED → ANALYZED` в пересчёте — условный UPDATE (не перетирает
+  решение оператора). `POST /api/leads/{id}/status`.
+- **Массовые действия** (§11): `POST /api/leads/bulk` — выбранные id или «все отфильтрованные» (те же фильтры, что у
+  списка) минус снятые, ≤ 5000; статус, свой тег, избранное; неприменимые лиды — в `failures`, остальные меняются.
+- **Теги** (§36): `tags` / `lead_tags`, CRUD `/api/tags`; системные `weak-thumbnails`, `high-potential`, `hot-lead`,
+  `visual-opportunity` назначаются правилами при каждом пересчёте (без AI, `RescoreResult.system_tags_changed`), имена
+  зарезервированы, вручную — только цвет. Фильтр `tag` у лидов.
+- **Избранное** (§37): `favorites` (личное, канал / превью-видео), `/api/favorites`; `is_favorite` в лидах и списке
+  аудитов превью, фильтр `favorite`. Generated concepts — Phase 5.
+- **Ручные оценки** (§47): `score_overrides` — значение человека рядом с AI (AI не перезаписывается), `PUT/DELETE
+  /api/score-overrides`. Ручные `overall_score` / `redesign_potential` превью заменяют AI во входах Lead Score
+  (причина компонента: «ручная оценка у N»), ручные Lead / Priority Score — в сортировке, фильтрах и системных тегах;
+  правка сразу пересчитывает затронутые лиды. **AI vs человек** (§46): `feedback_events` + `GET /api/feedback/summary`.
+- **Approval Queue:** `approvals` + `approvals.service.require_approval` (решение привязано к SHA-256 канонического
+  JSON содержимого; правка после approve → `approval_outdated`). Эндпоинтов и раздела нет — нечего подтверждать до
+  офферов (Phase 7); кнопки ТЗ §22 (Approve / Edit / Regenerate / Reject / Skip / Schedule) — там же.
+- Frontend: на странице лидов — чекбоксы, «выбрать все отфильтрованные», панель массовых действий, звёздочка, теги в
+  строке, фильтры по тегам и избранному, в раскрытой строке — решение, теги, «Моя оценка» Lead / Priority; в таблице
+  показывается действующий балл (ручной помечен «я»). На карточке канала — то же для лида. В результатах аудита
+  превью — звёздочка и своя оценка общего балла / потенциала редизайна. Новые страницы «Избранное» (`g f`), «Теги»
+  (`g t`), «AI vs человек» (`g a`). Хуки — `lib/api/workflow-hooks.ts`, чистая логика — `lib/workflow.ts`.
+- Проверки (2026-10-14, машина `D:\Projects\youtubeprewopti`): backend `ruff check app tests`, `mypy app` (124 файла) —
+  чисто; unit без БД (`pytest --noconftest`: `test_human_workflow_units`, `test_state_machine`, `test_lead_scoring`,
+  `test_thumbnail_audit`, `test_channel_audit`) — проходят; миграция рендерится в offline SQL (`alembic upgrade
+  5c2d8e4f7a13:8d1f3b6a9e42 --sql`). Frontend `npm run typecheck`, `npm run lint` (0 ошибок, прежнее предупреждение
+  `useVirtualizer`), `npm test` — 66 (+14), `next build` — успешно (13 маршрутов).
+- Проверено с БД (2026-10-15): на машине поднят нативный PostgreSQL 16.15 без прав администратора — портативные
+  бинарники EDB в `%USERPROFILE%\.ytlead-pg\pgsql`, кластер `%USERPROFILE%\.ytlead-pg\data` (только `127.0.0.1:5432`,
+  `lc_messages='C'`, scram-sha-256, пароль суперпользователя из `.ytlead-secrets`), роли и базы — штатным
+  `scripts/setup-db.ps1`. Docker Desktop недоступен (пользователь не в `docker-users`). Запуск после перезагрузки:
+  `%USERPROFILE%\.ytlead-pg\pgsql\bin\pg_ctl -D %USERPROFILE%\.ytlead-pg\data -l %USERPROFILE%\.ytlead-pg\server.log start`.
+  `alembic upgrade head` на `ytlead` (все 10 миграций), `alembic check` — без расхождений; права `ytlead_app` на 6
+  новых таблиц — DML да, CREATE в схеме нет. Backend `pytest` — **318 passed / 1 skipped** (+16: 10 API + 6 unit).
+- **Не проверено:** сквозной прогон реальными процессами (uvicorn + воркер + `next start`), отрисовка UI в браузере
+  (Playwright не установлен), CI.
 
 **VERIFICATION STATUS (этап архитектуры):**
 - Verified: версии пакетов (PyPI/npm), Procrastinate на Windows + PG16 (spike), квоты YouTube (официальная документация), модели gpt-image-2.5-flare/sunburst и линейка GPT-6 (документация OpenAI).

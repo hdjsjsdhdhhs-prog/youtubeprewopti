@@ -16,6 +16,7 @@ from app.domains.analysis.channel_audit import (
     RecurringProblem,
 )
 from app.domains.analysis.models import ScoringKind
+from app.domains.feedback.schemas import ScoreOverrideOut
 from app.domains.jobs.schemas import JobRunOut
 
 
@@ -207,6 +208,9 @@ class AnalyzedVideoOut(BaseModel):
     channel_id: int
     channel_title: str
     analysis: ThumbnailAnalysisOut
+    # human values of this audit (ТЗ §47), shown next to the AI ones; ``overall_score`` stays the AI value
+    overrides: list[ScoreOverrideOut] = Field(default_factory=list)
+    is_favorite: bool = False  # the video's thumbnail is a favorite of the current user (ТЗ §37)
 
 
 class AnalysisSort(StrEnum):
@@ -340,6 +344,7 @@ class ChannelVisualReport(BaseModel):
     aggregates: ChannelAggregates | None
     videos: list[ChannelAuditVideo]  # the compared videos in the order the model saw them
     scoring: ScoringProfileOut
+    overrides: list[ScoreOverrideOut] = Field(default_factory=list)  # human values of ``analysis`` (§47)
 
 
 class AnalyzedChannelOut(BaseModel):

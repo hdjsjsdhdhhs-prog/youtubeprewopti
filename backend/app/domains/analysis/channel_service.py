@@ -44,6 +44,8 @@ from app.domains.analysis.schemas import (
     ChannelVisualReport,
 )
 from app.domains.analysis.service import budget_checks
+from app.domains.feedback.models import ScoreTarget
+from app.domains.feedback.service import overrides_for
 from app.domains.identity.service import audit
 from app.domains.jobs.schemas import JobRunOut
 from app.domains.jobs.service import JobQueue, JobType, enqueue_job
@@ -324,6 +326,9 @@ async def channel_visual_report(db: AsyncSession, workspace_id: int, channel_id:
         aggregates=aggregates_out(agg_row) if agg_row is not None else NO_AGGREGATES,
         videos=[by_id[i] for i in analysis.video_ids if i in by_id],
         scoring=profile,
+        overrides=(await overrides_for(db, workspace_id, ScoreTarget.CHANNEL_ANALYSIS, [analysis.id])).get(
+            analysis.id, []
+        ),
     )
 
 

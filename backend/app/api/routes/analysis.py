@@ -126,6 +126,7 @@ async def list_thumbnail_analyses(
     """Videos of the project with a current AI thumbnail audit. Default order: weakest ``overall_score``
     first (best redesign candidates). ``summary`` covers all analysed videos of the project."""
     return await service.list_thumbnail_analyses(
-        db, ctx.workspace.id, project_id, sort=sort, order=order, opportunity=opportunity, problem=problem,
-        max_overall=max_overall, channel_id=channel_id, limit=page.limit, offset=page.offset,
+        db, ctx.workspace.id, project_id, user_id=ctx.user.id, sort=sort, order=order,
+        opportunity=opportunity, problem=problem, max_overall=max_overall, channel_id=channel_id,
+        limit=page.limit, offset=page.offset,
     )

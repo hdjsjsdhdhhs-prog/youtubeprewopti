@@ -3,12 +3,14 @@
 import Link from "next/link";
 
 import { LeadScoreBreakdown } from "@/components/lead-score";
+import { FavoriteStar, HumanScore, LeadStatusActions, LeadTagsEditor } from "@/components/lead-workflow";
 import { InlineError } from "@/components/states";
 import { Badge, Card } from "@/components/ui";
 import { useLeads } from "@/lib/api/hooks";
-import { ACTIVITY_LABELS, STATUS_LABELS, type LeadQuery } from "@/lib/leads";
+import { ACTIVITY_LABELS, STATUS_LABELS, formatLeadScore, type LeadQuery } from "@/lib/leads";
 
-/** The channel as a lead of this workspace (Phase 3.7): status and the explainable Lead Score. */
+/** The channel as a lead of this workspace: status, decisions, tags, favorite, human scores (Phase 4) and the
+ * explainable Lead Score (Phase 3.7). */
 export function ChannelLead({ channelId }: { channelId: number }) {
   const query: LeadQuery = { channel_id: channelId, sort: "lead_score", order: "desc", offset: 0 };
   const leads = useLeads(query);
@@ -20,6 +22,7 @@ export function ChannelLead({ channelId }: { channelId: number }) {
         <h2 className="text-sm font-semibold">Лид</h2>
         {lead ? (
           <>
+            <FavoriteStar type="channel" id={channelId} on={lead.is_favorite} label={lead.channel.title} />
             <Badge tone="blue">{STATUS_LABELS[lead.status]}</Badge>
             {lead.activity_level ? <Badge>активность: {ACTIVITY_LABELS[lead.activity_level]}</Badge> : null}
             <Link href="/leads" className="text-xs text-zinc-500 hover:underline">
@@ -28,6 +31,41 @@ export function ChannelLead({ channelId }: { channelId: number }) {
           </>
         ) : null}
       </div>
+      {lead ? (
+        <div className="mb-3 space-y-2">
+          <LeadStatusActions lead={lead} />
+          {lead.rejected_reason ? (
+            <p className="text-xs text-zinc-500">Причина отклонения: {lead.rejected_reason}</p>
+          ) : null}
+          <LeadTagsEditor lead={lead} />
+          {lead.score ? (
+            <div className="flex flex-wrap gap-x-6">
+              <HumanScore
+                target="lead"
+                targetId={lead.id}
+                field="total"
+                aiValue={lead.score.total}
+                overrides={lead.overrides}
+                min={0}
+                max={100}
+                label="Lead Score"
+                format={formatLeadScore}
+              />
+              <HumanScore
+                target="lead"
+                targetId={lead.id}
+                field="priority_score"
+                aiValue={lead.score.priority_score}
+                overrides={lead.overrides}
+                min={0}
+                max={100}
+                label="Приоритет"
+                format={formatLeadScore}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <InlineError error={leads.error} />
       {leads.isPending ? (
         <p className="text-sm text-zinc-500">Загрузка…</p>

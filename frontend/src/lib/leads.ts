@@ -91,6 +91,8 @@ export type LeadQuery = {
   activity?: ActivityLevel;
   visual_opportunity?: (typeof LEVELS)[number];
   niche?: number[];
+  tag?: number[]; // any of these tags (Phase 4)
+  favorite?: boolean; // favorites of the current user (Phase 4)
   sort: LeadSort;
   order: Order;
   offset: number;
@@ -127,14 +129,20 @@ export function leadQueryFromParams(params: URLSearchParams): LeadQuery {
   const status = [...new Set(listParam(params, "status"))].filter((s): s is LeadStatus =>
     (LEAD_STATUSES as string[]).includes(s),
   );
-  const niche = [...new Set(listParam(params, "niche").map(Number))].filter((n) => Number.isInteger(n) && n > 0);
+  const ids = (key: string) =>
+    [...new Set(listParam(params, key).map(Number))].filter((n) => Number.isInteger(n) && n > 0).slice(0, 50);
+  const niche = ids("niche");
+  const tag = ids("tag");
+  const favorite = enumParam(params, "favorite", ["true", "false"] as const);
   const out: LeadQuery = {
     project_id: intParam(params, "project_id"),
     q: q || undefined,
     status: status.length ? status : undefined,
     activity: enumParam(params, "activity", ACTIVITY_LEVELS),
     visual_opportunity: enumParam(params, "visual_opportunity", LEVELS),
-    niche: niche.length ? niche.slice(0, 50) : undefined,
+    niche: niche.length ? niche : undefined,
+    tag: tag.length ? tag : undefined,
+    favorite: favorite === undefined ? undefined : favorite === "true",
     sort: enumParam(params, "sort", LEAD_SORTS) ?? "lead_score",
     order: enumParam(params, "order", ORDERS) ?? "desc",
     offset: intParam(params, "offset") ?? 0,
@@ -147,7 +155,7 @@ export function leadQueryFromParams(params: URLSearchParams): LeadQuery {
 }
 
 const FILTER_KEYS = [
-  "project_id", "q", "status", "activity", "visual_opportunity", "niche", ...INT_KEYS,
+  "project_id", "q", "status", "activity", "visual_opportunity", "niche", "tag", "favorite", ...INT_KEYS,
   ...(Object.keys(RANGE_KEYS) as RangeKey[]),
 ] as const;
 

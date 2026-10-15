@@ -162,8 +162,9 @@ class LeadInputs:
     views_trend: float | None = None  # newer half of the window vs older half: +0.5 = +50 %
     subscriber_growth_30d: float | None = None  # from stats snapshots, per 30 days: 0.05 = +5 %
     thumbnails_audited: int = 0
-    avg_thumbnail_score: Decimal | None = None  # workspace thumbnail weights
+    avg_thumbnail_score: Decimal | None = None  # workspace thumbnail weights; human overrides win (§47)
     avg_redesign_potential: Decimal | None = None
+    thumbnails_human_scored: int = 0  # of thumbnails_audited: with a human overall / redesign value
     visual_opportunity: str | None = None  # current comparative channel audit (3.6)
     niche_ids: frozenset[int] = field(default_factory=frozenset)  # discovery niches + their ancestors
 
@@ -217,6 +218,9 @@ def thumbnail_opportunity(i: LeadInputs) -> Component:
         f"средний балл превью {avg:.2f}/10 по {i.thumbnails_audited} превью, "
         f"потенциал редизайна {redesign:.1f}/10"
     )
+    if i.thumbnails_human_scored:
+        inputs["thumbnails_human_scored"] = i.thumbnails_human_scored
+        reason += f" (ручная оценка у {i.thumbnails_human_scored})"
     if i.visual_opportunity in OPPORTUNITY_FRACTION:
         f = 0.5 * gap + 0.25 * potential + 0.25 * OPPORTUNITY_FRACTION[i.visual_opportunity]
         reason += f", визуальная возможность канала: {i.visual_opportunity}"

@@ -8,7 +8,10 @@ Profiles and the lead / priority weights.
 * **Scoring** (``scoring.py``) runs in ``sync_leads``: after discovery / thumbnail / channel audit jobs of a
   project, after any change of weights or of the Ideal Lead Profile, and on demand
   (``POST /api/leads/sync``). A new ``lead_scores`` row is written only when the result differs from the
-  current one.
+  current one. Human thumbnail values (``score_overrides``) replace the AI ones in the inputs; system tags
+  (``tags.SYSTEM_TAGS``) are re-evaluated on every run.
+* **Human workflow** (Phase 4) — manual statuses and bulk actions are in ``workflow.py``; lists show the
+  tags, the user's favorites and the human Lead / Priority Score, which also drive sorting and filters.
 """
 
 from __future__ import annotations
@@ -22,14 +25,20 @@ from typing import Any
 from sqlalchemy import ColumnElement, and_, delete, exists, func, literal, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.errors import ConflictError, NotFoundError
-from app.core.state_machine import LEAD_MACHINE, LeadStatus
+from app.core.state_machine import LeadStatus
 from app.domains.analysis import scoring as thumb_scoring
 from app.domains.analysis.models import AILevel, ChannelAnalysis, ScoringKind, ThumbnailAnalysis
+from app.domains.favorites.models import FavoriteEntity
+from app.domains.favorites.service import favorite_ids, is_favorite_condition
+from app.domains.feedback.models import ScoreOverride, ScoreTarget
+from app.domains.feedback.schemas import ScoreOverrideOut
+from app.domains.feedback.service import override_join, overrides_for
 from app.domains.identity.service import audit
-from app.domains.leads import scoring
-from app.domains.leads.models import IdealLeadProfile, Lead, LeadScore, LeadStatusHistory
+from app.domains.leads import scoring, tags
+from app.domains.leads.models import IdealLeadProfile, Lead, LeadScore, LeadStatusHistory, LeadTag
 from app.domains.leads.schemas import (
     IdealLeadProfileIn,
     IdealLeadProfileOut,
@@ -45,6 +54,7 @@ from app.domains.leads.schemas import (
     LeadScoreOut,
     LeadSort,
     LeadSummary,
+    LeadTagOut,
     LeadWeights,
     PriorityProfileOut,
     PriorityProfileSaved,
@@ -194,15 +204,25 @@ async def gather_inputs(
         .where(Channel.id.in_(ids))
     )
     overall = thumb_scoring.overall_sql(thumbnail_weights)
+    # human values (ТЗ §47) win over the AI ones; the AI values stay in thumbnail_analyses
+    ov_overall = aliased(ScoreOverride)
+    ov_redesign = aliased(ScoreOverride)
+    thumb_target = ScoreTarget.THUMBNAIL_ANALYSIS
     thumbs = {
-        cid: (int(n), avg, redesign)
-        for cid, n, avg, redesign in (
+        cid: (int(n), avg, redesign, int(human))
+        for cid, n, avg, redesign, human in (
             await db.execute(
                 select(
                     Video.channel_id,
                     func.count(),
-                    func.round(func.avg(overall), 2),
-                    func.round(func.avg(ThumbnailAnalysis.redesign_potential), 2),
+                    func.round(func.avg(func.coalesce(ov_overall.human_value, overall)), 2),
+                    func.round(
+                        func.avg(
+                            func.coalesce(ov_redesign.human_value, ThumbnailAnalysis.redesign_potential)
+                        ),
+                        2,
+                    ),
+                    func.count().filter(or_(ov_overall.id.is_not(None), ov_redesign.id.is_not(None))),
                 )
                 .join(Thumbnail, Thumbnail.video_id == Video.id)
                 .join(
@@ -210,6 +230,18 @@ async def gather_inputs(
                     and_(
                         ThumbnailAnalysis.image_asset_id == Thumbnail.image_asset_id,
                         ThumbnailAnalysis.is_current,
+                    ),
+                )
+                .outerjoin(
+                    ov_overall,
+                    override_join(
+                        ov_overall, workspace_id, thumb_target, "overall_score", ThumbnailAnalysis.id
+                    ),
+                )
+                .outerjoin(
+                    ov_redesign,
+                    override_join(
+                        ov_redesign, workspace_id, thumb_target, "redesign_potential", ThumbnailAnalysis.id
                     ),
                 )
                 .where(Video.channel_id.in_(ids), Video.is_short.is_not(True))
@@ -266,7 +298,7 @@ async def gather_inputs(
 
     out: dict[int, scoring.LeadInputs] = {}
     for channel, m in base.tuples():
-        n, avg, redesign = thumbs.get(channel.id, (0, None, None))
+        n, avg, redesign, human = thumbs.get(channel.id, (0, None, None, 0))
         out[channel.id] = scoring.LeadInputs(
             subscribers=channel.subscriber_count,
             subscribers_hidden=channel.subscribers_hidden,
@@ -282,6 +314,7 @@ async def gather_inputs(
             thumbnails_audited=n,
             avg_thumbnail_score=Decimal(avg) if avg is not None else None,
             avg_redesign_potential=Decimal(redesign) if redesign is not None else None,
+            thumbnails_human_scored=human,
             visual_opportunity=opportunity.get(channel.id),
             niche_ids=_with_ancestors(niches.get(channel.id, ()), parents),
         )
@@ -371,13 +404,28 @@ def _same(current: LeadScore | None, values: dict[str, Any]) -> bool:
     return current is not None and all(getattr(current, k) == values[k] for k in _COMPARED)
 
 
+async def _human_lead_scores(
+    db: AsyncSession, workspace_id: int, lead_ids: Sequence[int]
+) -> dict[int, dict[str, Decimal]]:
+    out: dict[int, dict[str, Decimal]] = {}
+    for lead_id, rows in (await overrides_for(db, workspace_id, ScoreTarget.LEAD, lead_ids)).items():
+        out[lead_id] = {o.field: o.human_value for o in rows}
+    return out
+
+
 async def sync_leads(
-    db: AsyncSession, workspace_id: int, project_id: int | None = None, *, now: datetime | None = None
+    db: AsyncSession,
+    workspace_id: int,
+    project_id: int | None = None,
+    *,
+    channel_ids: Sequence[int] | None = None,
+    now: datetime | None = None,
 ) -> RescoreResult:
-    """Create missing leads for the workspace's (or one project's) channels, advance DISCOVERED → ANALYZED
-    and (re)score them. Deterministic, no AI; the caller commits."""
+    """Create missing leads for the workspace's (or one project's) channels, advance DISCOVERED → ANALYZED,
+    (re)score them and re-evaluate their system tags. ``channel_ids`` rescores only the leads of these
+    channels (no creation) — used after a human score change. Deterministic, no AI; the caller commits."""
     now = now or datetime.now(UTC)
-    created = await _create_missing(db, workspace_id, project_id)
+    created = 0 if channel_ids is not None else await _create_missing(db, workspace_id, project_id)
     thumb = await thumb_scoring.active_thumbnail_weights(db, workspace_id)
     lead_w = await active_lead_weights(db, workspace_id)
     prio_w = await active_priority_weights(db, workspace_id)
@@ -400,8 +448,10 @@ async def sync_leads(
                 )
             )
         )
+    if channel_ids is not None:
+        leads_q = leads_q.where(Lead.channel_id.in_(list(channel_ids)))
     leads = list(await db.scalars(leads_q.order_by(Lead.id)))
-    analyzed = changed = unchanged = 0
+    analyzed = changed = unchanged = tags_changed = 0
     for start in range(0, len(leads), BATCH):
         batch = leads[start : start + BATCH]
         inputs = await gather_inputs(
@@ -415,15 +465,17 @@ async def sync_leads(
                 )
             )
         }
+        human = await _human_lead_scores(db, workspace_id, [lead.id for lead in batch])
+        system_tags: dict[int, set[str]] = {}
         for lead in batch:
             i = inputs.get(lead.channel_id)
             if i is None:  # channel deleted meanwhile
                 continue
             if lead.status == LeadStatus.DISCOVERED and i.thumbnails_audited > 0:
-                await _transition(db, lead, LeadStatus.ANALYZED, None, REASON_ANALYZED, now)
-                analyzed += 1
+                analyzed += await _auto_analyzed(db, lead, now)
             comps = scoring.compute_components(i, ilp, niche_values, now)
             b = scoring.score(comps, lead_w.weights.component_weights(), prio_w.weights.component_weights())
+            system_tags[lead.id] = tags.system_tag_keys(i, human.get(lead.id, {}).get("total", b.total), now)
             values = _score_values(b, i) | versions
             if _same(current.get(lead.id), values):
                 unchanged += 1
@@ -437,26 +489,38 @@ async def sync_leads(
             db.add(LeadScore(lead_id=lead.id, is_current=True, **values))
             changed += 1
         await db.flush()
+        tags_changed += await tags.apply_system_tags(db, workspace_id, system_tags)
     return RescoreResult(
-        leads_created=created, leads_analyzed=analyzed, scores_changed=changed, scores_unchanged=unchanged
+        leads_created=created,
+        leads_analyzed=analyzed,
+        scores_changed=changed,
+        scores_unchanged=unchanged,
+        system_tags_changed=tags_changed,
     )
 
 
-async def _transition(
-    db: AsyncSession, lead: Lead, target: LeadStatus, actor_id: int | None, reason: str, now: datetime
-) -> None:
-    LEAD_MACHINE.assert_can(lead.status, target)
+async def _auto_analyzed(db: AsyncSession, lead: Lead, now: datetime) -> int:
+    """DISCOVERED → ANALYZED unless an operator moved the lead meanwhile (conditional UPDATE: the rescore
+    runs in jobs concurrently with the human workflow)."""
+    moved = await db.scalar(
+        update(Lead)
+        .where(Lead.id == lead.id, Lead.status == LeadStatus.DISCOVERED)
+        .values(status=LeadStatus.ANALYZED, status_changed_at=now)
+        .returning(Lead.id)
+    )
+    if moved is None:
+        await db.refresh(lead, ["status", "status_changed_at"])
+        return 0
     db.add(
         LeadStatusHistory(
             lead_id=lead.id,
-            from_status=lead.status,
-            to_status=target,
-            actor_user_id=actor_id,
-            reason=reason,
+            from_status=LeadStatus.DISCOVERED,
+            to_status=LeadStatus.ANALYZED,
+            actor_user_id=None,
+            reason=REASON_ANALYZED,
         )
     )
-    lead.status = target
-    lead.status_changed_at = now
+    return 1
 
 
 async def sync_project_leads(
@@ -497,6 +561,10 @@ def _lead_out(
     score: LeadScore | None,
     opportunity: AILevel | None,
     now: datetime,
+    *,
+    tags: list[LeadTagOut],
+    is_favorite: bool,
+    overrides: list[ScoreOverrideOut],
 ) -> LeadOut:
     return LeadOut(
         id=lead.id,
@@ -504,12 +572,16 @@ def _lead_out(
         status_changed_at=lead.status_changed_at,
         created_at=lead.created_at,
         created_from_project_id=lead.created_from_project_id,
+        rejected_reason=lead.rejected_reason,
         channel=_channel_out(channel, metrics),
         activity_level=scoring.activity_level(
             metrics.last_video_at if metrics else None, metrics.videos_30d if metrics else None, now
         ),
         visual_opportunity=opportunity.value if opportunity is not None else None,
         score=LeadScoreOut.model_validate(score) if score is not None else None,
+        tags=tags,
+        is_favorite=is_favorite,
+        overrides=overrides,
     )
 
 
@@ -521,7 +593,14 @@ def _in_project(project_id: int) -> ColumnElement[bool]:
     )
 
 
-def _lead_select() -> Any:
+# Human Lead / Priority Score (ТЗ §47) — the effective value sorts and filters, the AI one stays in LeadScore.
+_HUMAN_TOTAL = aliased(ScoreOverride, name="human_total")
+_HUMAN_PRIORITY = aliased(ScoreOverride, name="human_priority")
+EFFECTIVE_TOTAL = func.coalesce(_HUMAN_TOTAL.human_value, LeadScore.total)
+EFFECTIVE_PRIORITY = func.coalesce(_HUMAN_PRIORITY.human_value, LeadScore.priority_score)
+
+
+def _lead_select(workspace_id: int) -> Any:
     return (
         select(Lead, Channel, ChannelMetrics, LeadScore, ChannelAnalysis.visual_opportunity)
         .join(Channel, Channel.id == Lead.channel_id)
@@ -530,6 +609,13 @@ def _lead_select() -> Any:
         .outerjoin(
             ChannelAnalysis, and_(ChannelAnalysis.channel_id == Channel.id, ChannelAnalysis.is_current)
         )
+        .outerjoin(
+            _HUMAN_TOTAL, override_join(_HUMAN_TOTAL, workspace_id, ScoreTarget.LEAD, "total", Lead.id)
+        )
+        .outerjoin(
+            _HUMAN_PRIORITY,
+            override_join(_HUMAN_PRIORITY, workspace_id, ScoreTarget.LEAD, "priority_score", Lead.id),
+        )
     )
 
 
@@ -537,17 +623,10 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-async def list_leads(
-    db: AsyncSession,
-    workspace_id: int,
-    f: LeadFilters,
-    *,
-    sort: LeadSort,
-    order: SortOrder,
-    limit: int,
-    offset: int,
-) -> LeadList:
-    now = datetime.now(UTC)
+async def _conditions(
+    db: AsyncSession, workspace_id: int, user_id: int, f: LeadFilters, now: datetime
+) -> tuple[list[ColumnElement[bool]], list[ColumnElement[bool]]]:
+    """(scope = workspace / project, scope + all filters) over ``_lead_select``."""
     scope: list[ColumnElement[bool]] = [Lead.workspace_id == workspace_id]
     if f.project_id is not None:
         await get_project(db, workspace_id, f.project_id)
@@ -564,8 +643,8 @@ async def list_leads(
         )
     for column, lo, hi in (
         (LeadScore.avg_thumbnail_score, f.min_thumbnail_score, f.max_thumbnail_score),
-        (LeadScore.total, f.min_lead_score, f.max_lead_score),
-        (LeadScore.priority_score, f.min_priority, None),
+        (EFFECTIVE_TOTAL, f.min_lead_score, f.max_lead_score),
+        (EFFECTIVE_PRIORITY, f.min_priority, None),
     ):
         if lo is not None:
             where.append(column >= lo)
@@ -575,6 +654,13 @@ async def list_leads(
         where.append(activity_condition(f.activity, now))
     if f.visual_opportunity is not None:
         where.append(ChannelAnalysis.visual_opportunity == AILevel(f.visual_opportunity))
+    if f.tag:
+        where.append(
+            exists(select(LeadTag.lead_id).where(LeadTag.lead_id == Lead.id, LeadTag.tag_id.in_(f.tag)))
+        )
+    if f.favorite is not None:
+        fav = is_favorite_condition(workspace_id, user_id, FavoriteEntity.CHANNEL, Lead.channel_id)
+        where.append(fav if f.favorite else ~fav)
     where.extend(
         await channel_filter_conditions(
             db,
@@ -589,13 +675,58 @@ async def list_leads(
             ),
         )
     )
-    filtered = _lead_select().where(*where)
+    return scope, where
+
+
+async def lead_ids_matching(
+    db: AsyncSession, workspace_id: int, user_id: int, f: LeadFilters, *, limit: int
+) -> list[int]:
+    """Ids of the leads the list would show with these filters («select all filtered», ТЗ §11)."""
+    _, where = await _conditions(db, workspace_id, user_id, f, datetime.now(UTC))
+    stmt = _lead_select(workspace_id).with_only_columns(Lead.id).where(*where).order_by(Lead.id).limit(limit)
+    return list(await db.scalars(stmt))
+
+
+async def _items(
+    db: AsyncSession, workspace_id: int, user_id: int, rows: Sequence[Any], now: datetime
+) -> list[LeadOut]:
+    lead_ids = [r[0].id for r in rows]
+    tag_map = await tags.tags_for(db, lead_ids)
+    favorites = await favorite_ids(
+        db, workspace_id, user_id, FavoriteEntity.CHANNEL, [r[0].channel_id for r in rows]
+    )
+    overrides = await overrides_for(db, workspace_id, ScoreTarget.LEAD, lead_ids)
+    return [
+        _lead_out(
+            lead, ch, m, s, opp, now,
+            tags=tag_map.get(lead.id, []),
+            is_favorite=lead.channel_id in favorites,
+            overrides=overrides.get(lead.id, []),
+        )
+        for lead, ch, m, s, opp in rows
+    ]
+
+
+async def list_leads(
+    db: AsyncSession,
+    workspace_id: int,
+    user_id: int,
+    f: LeadFilters,
+    *,
+    sort: LeadSort,
+    order: SortOrder,
+    limit: int,
+    offset: int,
+) -> LeadList:
+    now = datetime.now(UTC)
+    scope, where = await _conditions(db, workspace_id, user_id, f, now)
+    filtered = _lead_select(workspace_id).where(*where)
     total = (
         await db.scalar(select(func.count()).select_from(filtered.with_only_columns(Lead.id).subquery())) or 0
     )
     key: Any = {
-        LeadSort.LEAD_SCORE: LeadScore.total,
-        LeadSort.PRIORITY: LeadScore.priority_score,
+        LeadSort.LEAD_SCORE: EFFECTIVE_TOTAL,
+        LeadSort.PRIORITY: EFFECTIVE_PRIORITY,
         LeadSort.THUMBNAIL_SCORE: LeadScore.avg_thumbnail_score,
         LeadSort.THUMBNAIL_OPPORTUNITY: LeadScore.thumbnail_opportunity,
         LeadSort.VISUAL_OPPORTUNITY: ChannelAnalysis.visual_opportunity,
@@ -608,7 +739,7 @@ async def list_leads(
     }[sort]
     ordered = key.asc().nulls_last() if order == SortOrder.ASC else key.desc().nulls_last()
     rows = await db.execute(filtered.order_by(ordered, Lead.id).limit(limit).offset(offset))
-    items = [_lead_out(lead, ch, m, s, opp, now) for lead, ch, m, s, opp in rows.tuples()]
+    items = await _items(db, workspace_id, user_id, list(rows.tuples()), now)
 
     scoped = (
         select(Lead.status, LeadScore.total)
@@ -643,11 +774,10 @@ async def list_leads(
     )
 
 
-async def get_lead(db: AsyncSession, workspace_id: int, lead_id: int) -> LeadDetail:
+async def get_lead(db: AsyncSession, workspace_id: int, user_id: int, lead_id: int) -> LeadDetail:
     now = datetime.now(UTC)
-    row = (
-        await db.execute(_lead_select().where(Lead.id == lead_id, Lead.workspace_id == workspace_id))
-    ).first()
+    stmt = _lead_select(workspace_id).where(Lead.id == lead_id, Lead.workspace_id == workspace_id)
+    row = (await db.execute(stmt)).tuples().first()
     if row is None:
         raise NotFoundError("Lead not found")
     lead, channel, metrics, score, opp = row
@@ -666,7 +796,7 @@ async def get_lead(db: AsyncSession, workspace_id: int, lead_id: int) -> LeadDet
     if score is not None and score.ideal_lead_profile_id is not None:
         ilp_row = await db.get(IdealLeadProfile, score.ideal_lead_profile_id)
         ilp = IdealLeadProfileOut.model_validate(ilp_row) if ilp_row is not None else None
-    base = _lead_out(lead, channel, metrics, score, opp, now)
+    [base] = await _items(db, workspace_id, user_id, [row], now)
     return LeadDetail(
         **base.model_dump(),
         history=[StatusChangeOut.model_validate(h) for h in history],

@@ -131,9 +131,16 @@ def _by_title(page):
 
 async def test_sync_creates_advances_and_scores_once(client, db, world, auth):
     first = await _sync(client, auth)
+    assert first.pop("system_tags_changed") >= 1  # at least Alpha's weak-thumbnails (Phase 4)
     assert first == {"leads_created": 3, "leads_analyzed": 2, "scores_changed": 3, "scores_unchanged": 0}
     again = await _sync(client, auth, {"project_id": world["project"].id})
-    assert again == {"leads_created": 0, "leads_analyzed": 0, "scores_changed": 0, "scores_unchanged": 3}
+    assert again == {
+        "leads_created": 0,
+        "leads_analyzed": 0,
+        "scores_changed": 0,
+        "scores_unchanged": 3,
+        "system_tags_changed": 0,
+    }
     assert await db.scalar(select(func.count()).select_from(LeadScore)) == 3
 
     leads = {lead.channel_id: lead for lead in await db.scalars(select(Lead))}

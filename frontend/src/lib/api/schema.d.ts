@@ -642,12 +642,38 @@ export interface paths {
         /**
          * List Leads
          * @description Leads of the workspace; all filters are optional and AND-ed (§9). ``activity`` = at least this level
-         *     (high: last video ≤ 14 days and ≥ 4 videos in 30 days; medium: last video ≤ 30 days). Default order:
+         *     (high: last video ≤ 14 days and ≥ 4 videos in 30 days; medium: last video ≤ 30 days). ``tag`` = any of
+         *     these tags; ``favorite`` = the channel is (``true``) / is not (``false``) a favorite of the current
+         *     user. Lead Score / Priority sort and filter by the human value where one is set (§47). Default order:
          *     highest Lead Score first.
          */
         get: operations["list_leads_api_leads_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leads/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Action
+         * @description One action on a selection (§11): ``selection.lead_ids`` (chosen rows) or ``selection.filters`` — the
+         *     same filters as ``GET /api/leads`` («all filtered») minus ``exclude_ids``; at most 5000 leads.
+         *     Actions: ``set_status`` (shortlisted / selected / analyzed / rejected, checked by the lead state
+         *     machine), ``add_tag`` / ``remove_tag`` (user tags), ``favorite`` / ``unfavorite`` (the leads' channels,
+         *     for the current user). Leads the action cannot apply to are listed in ``failures``; the rest change.
+         */
+        post: operations["bulk_action_api_leads_bulk_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -688,6 +714,167 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leads/{lead_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Lead Status
+         * @description Manual decision: shortlist, select, back to analyzed, reject (with a reason) or restore a rejected
+         *     lead (→ shortlisted). Other statuses belong to generation / offers / outreach (400
+         *     ``status_not_manual``); a transition the state machine forbids is 409 ``invalid_transition``. Setting
+         *     the current status again changes nothing.
+         */
+        post: operations["change_lead_status_api_leads__lead_id__status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tags
+         * @description System tags first (with the rule that assigns them), then user tags by name; ``leads`` = leads of
+         *     the workspace with the tag.
+         */
+        get: operations["list_tags_api_tags_get"];
+        put?: never;
+        /**
+         * Create Tag
+         * @description Names are unique per workspace ignoring case and repeated spaces (409 ``tag_exists``); system tag
+         *     names are reserved (409 ``tag_reserved``).
+         */
+        post: operations["create_tag_api_tags_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tags/{tag_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Tag
+         * @description Removes the tag from all leads. System tags cannot be deleted (409 ``system_tag``).
+         */
+        delete: operations["delete_tag_api_tags__tag_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Tag
+         * @description Rename / recolor. System tags: color only (409 ``system_tag`` on rename).
+         */
+        patch: operations["update_tag_api_tags__tag_id__patch"];
+        trace?: never;
+    };
+    "/api/favorites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Favorites
+         * @description Favorites of the current user, newest first. Entities no longer visible to the workspace (project
+         *     deleted) are not listed.
+         */
+        get: operations["list_favorites_api_favorites_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/favorites/{entity_type}/{entity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add Favorite
+         * @description Idempotent. ``thumbnail`` — ``entity_id`` is the video id (one thumbnail per video).
+         */
+        put: operations["add_favorite_api_favorites__entity_type___entity_id__put"];
+        post?: never;
+        /**
+         * Remove Favorite
+         * @description Idempotent.
+         */
+        delete: operations["remove_favorite_api_favorites__entity_type___entity_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/score-overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Overrides */
+        get: operations["list_overrides_api_score_overrides_get"];
+        /**
+         * Set Override
+         * @description Set or change the human value of one score; the AI / code value is kept (``ai_value`` is taken by
+         *     the server). A human thumbnail ``overall_score`` / ``redesign_potential`` or Lead ``total`` /
+         *     ``priority_score`` rescores the affected leads (``rescored``).
+         */
+        put: operations["set_override_api_score_overrides_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/score-overrides/{override_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Override
+         * @description Back to the AI / code value (logged as feedback).
+         */
+        delete: operations["remove_override_api_score_overrides__override_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -906,6 +1093,27 @@ export interface paths {
         patch: operations["update_ideal_profile_api_ideal_lead_profiles__profile_id__patch"];
         trace?: never;
     };
+    "/api/feedback/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Feedback Summary
+         * @description Where the AI over- / underestimates (current human values vs the AI values they replaced) and the
+         *     manual lead decisions with the average Lead Score the code gave those leads.
+         */
+        get: operations["feedback_summary_api_feedback_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1098,6 +1306,13 @@ export interface components {
             /** Channel Title */
             channel_title: string;
             analysis: components["schemas"]["ThumbnailAnalysisOut"];
+            /** Overrides */
+            overrides?: components["schemas"]["ScoreOverrideOut"][];
+            /**
+             * Is Favorite
+             * @default false
+             */
+            is_favorite: boolean;
         };
         /** AuditProblem */
         AuditProblem: {
@@ -1199,6 +1414,13 @@ export interface components {
             max_ai_operations?: number | null;
             /** Is Active */
             is_active?: boolean | null;
+        };
+        /** BulkFailure */
+        BulkFailure: {
+            /** Lead Id */
+            lead_id: number;
+            /** Error */
+            error: string;
         };
         /**
          * ChannelAggregates
@@ -1587,6 +1809,19 @@ export interface components {
             /** Videos */
             videos: components["schemas"]["ChannelAuditVideo"][];
             scoring: components["schemas"]["ScoringProfileOut"];
+            /** Overrides */
+            overrides?: components["schemas"]["ScoreOverrideOut"][];
+        };
+        /**
+         * DecisionStats
+         * @description Manual lead decisions and the Lead Score the code gave the lead at that moment.
+         */
+        DecisionStats: {
+            status: components["schemas"]["LeadStatus"];
+            /** Decisions */
+            decisions: number;
+            /** Avg Lead Score */
+            avg_lead_score: string | null;
         };
         /**
          * DiscoveryOut
@@ -1650,6 +1885,90 @@ export interface components {
             created: boolean;
             /** Items */
             items: number;
+        };
+        /** FavoriteAction */
+        FavoriteAction: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "favorite" | "unfavorite";
+        };
+        /** FavoriteChannelRef */
+        FavoriteChannelRef: {
+            /** Id */
+            id: number;
+            /** Youtube Channel Id */
+            youtube_channel_id: string;
+            /** Title */
+            title: string;
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Subscriber Count */
+            subscriber_count: number | null;
+            /** Is Demo */
+            is_demo: boolean;
+        };
+        /**
+         * FavoriteEntity
+         * @enum {string}
+         */
+        FavoriteEntity: "channel" | "thumbnail";
+        /** FavoriteList */
+        FavoriteList: {
+            /** Items */
+            items: components["schemas"]["FavoriteOut"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** FavoriteOut */
+        FavoriteOut: {
+            entity_type: components["schemas"]["FavoriteEntity"];
+            /** Entity Id */
+            entity_id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            channel: components["schemas"]["FavoriteChannelRef"] | null;
+            video: components["schemas"]["FavoriteVideoRef"] | null;
+        };
+        /** FavoriteState */
+        FavoriteState: {
+            entity_type: components["schemas"]["FavoriteEntity"];
+            /** Entity Id */
+            entity_id: number;
+            /** Is Favorite */
+            is_favorite: boolean;
+        };
+        /** FavoriteVideoRef */
+        FavoriteVideoRef: {
+            /** Id */
+            id: number;
+            /** Youtube Video Id */
+            youtube_video_id: string;
+            /** Title */
+            title: string;
+            /** Channel Id */
+            channel_id: number;
+            /** Channel Title */
+            channel_title: string;
+            /** Image Url */
+            image_url: string | null;
+        };
+        /** FeedbackSummary */
+        FeedbackSummary: {
+            /** Overrides */
+            overrides: components["schemas"]["OverrideStats"][];
+            /** Lead Decisions */
+            lead_decisions: components["schemas"]["DecisionStats"][];
+            /** Events */
+            events: number;
         };
         /**
          * FetchStatus
@@ -1876,6 +2195,25 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "queued" | "running" | "completed" | "failed" | "retrying" | "cancelled";
+        /** LeadBulkRequest */
+        LeadBulkRequest: {
+            selection: components["schemas"]["LeadSelection"];
+            /** Action */
+            action: components["schemas"]["SetStatusAction"] | components["schemas"]["TagAction"] | components["schemas"]["FavoriteAction"];
+        };
+        /** LeadBulkResult */
+        LeadBulkResult: {
+            /** Matched */
+            matched: number;
+            /** Changed */
+            changed: number;
+            /** Unchanged */
+            unchanged: number;
+            /** Failed */
+            failed: number;
+            /** Failures */
+            failures: components["schemas"]["BulkFailure"][];
+        };
         /** LeadDetail */
         LeadDetail: {
             /** Id */
@@ -1893,16 +2231,68 @@ export interface components {
             created_at: string;
             /** Created From Project Id */
             created_from_project_id: number | null;
+            /** Rejected Reason */
+            rejected_reason: string | null;
             channel: components["schemas"]["ChannelOut"];
             activity_level: components["schemas"]["ActivityLevel"] | null;
             /** Visual Opportunity */
             visual_opportunity: ("low" | "medium" | "high") | null;
             score: components["schemas"]["LeadScoreOut"] | null;
+            /** Tags */
+            tags: components["schemas"]["LeadTagOut"][];
+            /** Is Favorite */
+            is_favorite: boolean;
+            /** Overrides */
+            overrides: components["schemas"]["ScoreOverrideOut"][];
             /** History */
             history: components["schemas"]["StatusChangeOut"][];
             /** Score History */
             score_history: components["schemas"]["LeadScoreHistoryItem"][];
             ideal_lead_profile: components["schemas"]["IdealLeadProfileOut"] | null;
+        };
+        /**
+         * LeadFilters
+         * @description ТЗ §9: all filters AND-ed. Score filters exclude leads without a score / without audited
+         *     thumbnails; channel filters exclude channels without metrics (as on the channels page). Lead Score and
+         *     Priority filters use the human value where one is set (ТЗ §47). ``tag`` — any of the tags;
+         *     ``favorite`` — favorites of the current user.
+         */
+        LeadFilters: {
+            /** Project Id */
+            project_id?: number | null;
+            /** Channel Id */
+            channel_id?: number | null;
+            /** Status */
+            status?: components["schemas"]["LeadStatus"][];
+            /** Q */
+            q?: string | null;
+            /** Min Thumbnail Score */
+            min_thumbnail_score?: number | string | null;
+            /** Max Thumbnail Score */
+            max_thumbnail_score?: number | string | null;
+            /** Min Lead Score */
+            min_lead_score?: number | string | null;
+            /** Max Lead Score */
+            max_lead_score?: number | string | null;
+            /** Min Priority */
+            min_priority?: number | string | null;
+            /** Min Subscribers */
+            min_subscribers?: number | null;
+            /** Max Subscribers */
+            max_subscribers?: number | null;
+            /** Min Avg Views */
+            min_avg_views?: number | null;
+            activity?: components["schemas"]["ActivityLevel"] | null;
+            /** Max Days Since Last Upload */
+            max_days_since_last_upload?: number | null;
+            /** Visual Opportunity */
+            visual_opportunity?: ("low" | "medium" | "high") | null;
+            /** Niche */
+            niche?: number[];
+            /** Tag */
+            tag?: number[];
+            /** Favorite */
+            favorite?: boolean | null;
         };
         /** LeadList */
         LeadList: {
@@ -1935,11 +2325,19 @@ export interface components {
             created_at: string;
             /** Created From Project Id */
             created_from_project_id: number | null;
+            /** Rejected Reason */
+            rejected_reason: string | null;
             channel: components["schemas"]["ChannelOut"];
             activity_level: components["schemas"]["ActivityLevel"] | null;
             /** Visual Opportunity */
             visual_opportunity: ("low" | "medium" | "high") | null;
             score: components["schemas"]["LeadScoreOut"] | null;
+            /** Tags */
+            tags: components["schemas"]["LeadTagOut"][];
+            /** Is Favorite */
+            is_favorite: boolean;
+            /** Overrides */
+            overrides: components["schemas"]["ScoreOverrideOut"][];
         };
         /** LeadProfileOut */
         LeadProfileOut: {
@@ -2017,6 +2415,18 @@ export interface components {
             created_at: string;
         };
         /**
+         * LeadSelection
+         * @description Exactly one of ``lead_ids`` (chosen rows) or ``filters`` («all filtered», ТЗ §11), the latter minus
+         *     ``exclude_ids`` (rows unticked after «select all»).
+         */
+        LeadSelection: {
+            /** Lead Ids */
+            lead_ids?: number[] | null;
+            filters?: components["schemas"]["LeadFilters"] | null;
+            /** Exclude Ids */
+            exclude_ids?: number[];
+        };
+        /**
          * LeadSort
          * @enum {string}
          */
@@ -2026,6 +2436,19 @@ export interface components {
          * @enum {string}
          */
         LeadStatus: "discovered" | "analyzed" | "shortlisted" | "selected" | "generation_pending" | "generated" | "offer_draft" | "pending_approval" | "approved" | "scheduled" | "sent" | "replied" | "declined" | "opted_out" | "failed" | "rejected";
+        /**
+         * LeadStatusChange
+         * @description Manual decision on a lead. Only ``MANUAL_STATUSES`` can be set by hand (the rest belong to
+         *     generation / offers / outreach); the transition must be allowed by the lead state machine.
+         */
+        LeadStatusChange: {
+            status: components["schemas"]["LeadStatus"];
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
         /** LeadSummary */
         LeadSummary: {
             /** Leads */
@@ -2043,6 +2466,18 @@ export interface components {
         LeadSyncRequest: {
             /** Project Id */
             project_id?: number | null;
+        };
+        /** LeadTagOut */
+        LeadTagOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Color */
+            color: string | null;
+            /** Is System */
+            is_system: boolean;
+            source: components["schemas"]["TagSource"];
         };
         /**
          * LeadWeights
@@ -2136,6 +2571,31 @@ export interface components {
             name: string;
             /** Level */
             level: string;
+        };
+        /** OverrideRemoved */
+        OverrideRemoved: {
+            rescored: components["schemas"]["RescoreResult"] | null;
+        };
+        /**
+         * OverrideStats
+         * @description Current human values of one field vs the AI / code values they replaced (ТЗ §46).
+         */
+        OverrideStats: {
+            target_type: components["schemas"]["ScoreTarget"];
+            /** Field */
+            field: string;
+            /** Overrides */
+            overrides: number;
+            /** Avg Ai */
+            avg_ai: string;
+            /** Avg Human */
+            avg_human: string;
+            /** Avg Delta */
+            avg_delta: string;
+            /** Ai Overestimates */
+            ai_overestimates: number;
+            /** Ai Underestimates */
+            ai_underestimates: number;
         };
         /** Page[ChannelOut] */
         Page_ChannelOut_: {
@@ -2524,6 +2984,11 @@ export interface components {
             scores_changed: number;
             /** Scores Unchanged */
             scores_unchanged: number;
+            /**
+             * System Tags Changed
+             * @default 0
+             */
+            system_tags_changed: number;
         };
         /** ScoreComponentOut */
         ScoreComponentOut: {
@@ -2549,6 +3014,89 @@ export interface components {
             priority_weight: string;
         };
         /**
+         * ScoreOverrideIn
+         * @description Set (or change) the human value of one score. ``ai_value`` is taken by the server from the current
+         *     AI / code value — never from the client. Fields per target: ``thumbnail_analysis`` — ``overall_score``
+         *     and the 11 subscores (1–10); ``channel_analysis`` — ``visual_consistency``, ``outdated_style_score``
+         *     (1–10); ``lead`` — ``total``, ``priority_score`` (0–100).
+         */
+        ScoreOverrideIn: {
+            target_type: components["schemas"]["ScoreTarget"];
+            /** Target Id */
+            target_id: number;
+            /** Field */
+            field: string;
+            /** Human Value */
+            human_value: number | string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
+        /** ScoreOverrideOut */
+        ScoreOverrideOut: {
+            /** Id */
+            id: number;
+            target_type: components["schemas"]["ScoreTarget"];
+            /** Target Id */
+            target_id: number;
+            /** Field */
+            field: string;
+            /** Ai Value */
+            ai_value: string;
+            /** Human Value */
+            human_value: string;
+            /** Reason */
+            reason: string;
+            /** User Id */
+            user_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ScoreOverrideSaved */
+        ScoreOverrideSaved: {
+            /** Id */
+            id: number;
+            target_type: components["schemas"]["ScoreTarget"];
+            /** Target Id */
+            target_id: number;
+            /** Field */
+            field: string;
+            /** Ai Value */
+            ai_value: string;
+            /** Human Value */
+            human_value: string;
+            /** Reason */
+            reason: string;
+            /** User Id */
+            user_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            rescored: components["schemas"]["RescoreResult"] | null;
+        };
+        /**
+         * ScoreTarget
+         * @enum {string}
+         */
+        ScoreTarget: "thumbnail_analysis" | "channel_analysis" | "lead";
+        /**
          * ScoringKind
          * @enum {string}
          */
@@ -2567,6 +3115,20 @@ export interface components {
          * @enum {string}
          */
         SearchType: "video" | "channel";
+        /** SetStatusAction */
+        SetStatusAction: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "set_status";
+            status: components["schemas"]["LeadStatus"];
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
         /**
          * SortOrder
          * @enum {string}
@@ -2596,6 +3158,60 @@ export interface components {
              */
             created_at: string;
         };
+        /** TagAction */
+        TagAction: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "add_tag" | "remove_tag";
+            /** Tag Id */
+            tag_id: number;
+        };
+        /** TagIn */
+        TagIn: {
+            /** Name */
+            name: string;
+            /** Color */
+            color?: string | null;
+        };
+        /** TagOut */
+        TagOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Color */
+            color: string | null;
+            /** Is System */
+            is_system: boolean;
+            /** System Key */
+            system_key: string | null;
+            /** Rule */
+            rule: string | null;
+            /** Leads */
+            leads: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * TagPatch
+         * @description Absent field = unchanged; ``"color": null`` removes the color. System tags: only the color.
+         */
+        TagPatch: {
+            /** Name */
+            name?: string | null;
+            /** Color */
+            color?: string | null;
+        };
+        /**
+         * TagSource
+         * @enum {string}
+         */
+        TagSource: "user" | "system";
         /**
          * TaxonomyBulkImport
          * @description One name per line under ``parent_id`` (omitted = top-level niches).
@@ -4229,6 +4845,8 @@ export interface operations {
                 max_days_since_last_upload?: number | null;
                 visual_opportunity?: ("low" | "medium" | "high") | null;
                 niche?: number[] | null;
+                tag?: number[] | null;
+                favorite?: boolean | null;
                 sort?: components["schemas"]["LeadSort"];
                 order?: components["schemas"]["SortOrder"];
                 limit?: number;
@@ -4247,6 +4865,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeadList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_action_api_leads_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeadBulkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadBulkResult"];
                 };
             };
             /** @description Validation Error */
@@ -4311,6 +4962,351 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeadDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_lead_status_api_leads__lead_id__status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lead_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeadStatusChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tags_api_tags_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagOut"][];
+                };
+            };
+        };
+    };
+    create_tag_api_tags_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_tag_api_tags__tag_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_tag_api_tags__tag_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_favorites_api_favorites_get: {
+        parameters: {
+            query?: {
+                entity_type?: components["schemas"]["FavoriteEntity"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FavoriteList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_favorite_api_favorites__entity_type___entity_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_type: components["schemas"]["FavoriteEntity"];
+                entity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FavoriteState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_favorite_api_favorites__entity_type___entity_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_type: components["schemas"]["FavoriteEntity"];
+                entity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FavoriteState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_overrides_api_score_overrides_get: {
+        parameters: {
+            query: {
+                target_type: components["schemas"]["ScoreTarget"];
+                target_id: number[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoreOverrideOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_override_api_score_overrides_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScoreOverrideIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoreOverrideSaved"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_override_api_score_overrides__override_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                override_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverrideRemoved"];
                 };
             };
             /** @description Validation Error */
@@ -4760,6 +5756,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    feedback_summary_api_feedback_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackSummary"];
                 };
             };
         };
