@@ -1,7 +1,8 @@
 # ENGINEERING SUMMARY
 
-_Обновлено: 2026-10-15 — Phase 1, 2, 3.1–3.7 и Phase 4 закоммичены (`05191bf`), Phase 5 (генерация превью)
-реализована и проверена на mock (см. ниже); backend-тесты с PostgreSQL проходят.
+_Обновлено: 2026-10-15 — Phase 1, 2, 3.1–3.7 и Phase 4 закоммичены (`05191bf`), Phase 5 (генерация превью,
+`66efe43`) закоммичена, Phase 6 (контакты и Contactability Score) реализована; всё проверено на mock, backend-тесты
+с PostgreSQL проходят (см. ниже).
 Архитектурное исследование — 2026-09-24._
 
 **PROJECT:**
@@ -318,8 +319,59 @@ vibecode для `thumbnail_analysis/v1` — **не проверены** (раз�
   `npm run lint` (0 ошибок, прежнее предупреждение `useVirtualizer`), `npm test` — 89 (+23), `next build` (14 маршрутов).
 - **Не проверено:** реальные вызовы vibecode для генерации (разработка на mock, платных вызовов не было; транспорт
   `/images/generations` и `/images/edits` проверен ранее, но не через этот конвейер), сквозной прогон реальными
-  процессами (uvicorn + воркер + `next start`), отрисовка UI в браузере (Playwright не установлен), CI, права
-  `ytlead_app` на новые таблицы (default privileges — не перечитаны).
+  процессами (uvicorn + воркер + `next start`), отрисовка UI в браузере (Playwright не установлен), CI. Права
+  `ytlead_app` на таблицы Phase 5 проверены 2026-10-15: SELECT есть, `CREATE` / `DROP` — `InsufficientPrivilege`.
+
+**PHASE 6 — КОНТАКТЫ И CONTACTABILITY SCORE (2026-10-15):** ТЗ §18–19; миграция `6b3e9d2f4a71`.
+- **Только публичные данные, без сети и AI** (`app/domains/contacts/`): детерминированный разбор текстов
+  (`extract.py`, `EXTRACTOR_VERSION`) — email (включая обфускацию `name [at] host [dot] tld`, IDN), Telegram (`t.me/…`,
+  `@user` только в строке с «telegram/тг»), VK, Instagram, сайт (один на домен), прочие соцсети; мусор (`logo@2x.png`,
+  `t.me/share`, посты VK/Instagram, YouTube) отбрасывается. Источники — описание канала и описания последних сохранённых
+  видео канала (≤ 50); страница «О канале» — зарезервирована (в Data API её нет, скрапинг запрещён ТЗ §18).
+- **Модель** (DATABASE.md «Contacts»): `contacts` — публичные контакты **глобальные** (`workspace_id` NULL, как каналы),
+  вручную добавленный — только у своего workspace (CHECK `manual_is_workspace_owned`); `contact_states` — вердикт
+  workspace по публичному контакту (verified / invalid / opted_out …), чужие вердикты не видны; `suppression_list` —
+  «не писать» на уровне workspace; `channel_contact_scans` — когда и каким экстрактором просмотрены тексты (скан без
+  пригодных контактов = статус ТЗ `not_found`, а не «нет данных»). Пропавший из текстов контакт остаётся с
+  `present = false` и не учитывается.
+- **Когда сканируется:** при discovery для каждого (пере)загруженного канала (`contacts_new` в результате задачи), задачей
+  `contact_extraction` (очередь `bulk`, по проекту, партиями по 50 с коммитом на партию, ≤ 5000 за задачу; повтор
+  пропускает каналы с неизменившимися текстами по digest) и по кнопке для одного канала.
+- **Contactability Score** (`contacts/scoring.py`, ТЗ §19): сумма баллов за каждый доступный тип (тип считается один раз),
+  максимум 100; по умолчанию email 30, Telegram 30, сайт 20, VK 10, другие соцсети (вкл. Instagram) 10; веса —
+  `scoring_profiles` kind `contactability` (версии на workspace, сохранение пересчитывает лиды). Пригодный контакт =
+  присутствует в текстах (или добавлен вручную), не `invalid` / `opted_out`, значение не в списке подавления workspace.
+- **Интеграция с лидами:** компонент `contactability` — «нет данных» до первого скана, после скана без находок — 0
+  (`not_found`); `lead_scores.contactability_score` (0–100, NULL = не сканировалось) и `contactability_profile_version`;
+  фильтры `contact_type` / `min_contactability`, сортировка `contactability`; критерий `contact_types` профиля идеального
+  лида теперь работает (канал без скана = «нет данных» = не совпало). Вес компонента в Lead / Priority Score **остаётся 0
+  по умолчанию**: иначе изменились бы баллы всех лидов — включение это решение workspace.
+- **API:** `GET /api/channels/{id}/contacts`, `POST …/contacts/scan`, `POST …/contacts` (вручную; 422 `invalid_contact`,
+  409 `contact_exists`), `PATCH /api/contacts/{id}` (статус; `opted_out` необратим здесь — 409 `opted_out_final`, и кладёт
+  значение в список подавления), `DELETE /api/contacts/{id}` (только ручные — 409 `contact_not_manual`),
+  `GET /api/projects/{id}/contacts/stats`, `POST …/contacts/scan`, `GET/POST /api/suppression-list`, `DELETE
+  /api/suppression-list/{id}` (admin, аудит), `GET/PUT /api/scoring-profiles/contactability` (PUT — admin). Любое
+  изменение контактов пересчитывает лиды затронутых каналов; всё пишется в `audit_logs`.
+- **Frontend:** карточка «Контакты» на странице канала (статус, балл, список со ссылками только http(s)/mailto, статусы,
+  «Отказался», ручное добавление), блок «Контакты каналов» на странице проекта (счётчики, запуск, последние задачи),
+  колонка и фильтры контактов на странице лидов («все отфильтрованные» в массовых действиях несут и их), карточка весов
+  Contactability в настройках скоринга, страница «Не писать» (`g s`).
+- **Тесты Phase 3.7 изменены намеренно:** `test_ideal_lead_profile_drives_channel_fit`,
+  `test_perfect_lead_scores_100…`, `test_channel_fit_counts_unknown…` фиксировали «контакты не учитываются до Phase 6» /
+  причину «появится в Phase 6» — теперь ожидается новое поведение (плюс новые тесты на него), проверки не ослаблены.
+- Проверки (2026-10-15): backend `pytest` **386 passed / 1 skipped** (+28: разбор текстов, скоринг контактности, API
+  скана / ручных контактов / статусов / opt-out / списка подавления / весов / фильтров лидов / задачи проекта / ролей /
+  изоляции workspace, discovery и тело задачи на mock), `ruff check app tests`, `mypy app` (138 файлов), миграция
+  `upgrade → downgrade → upgrade` и `alembic check` на `ytlead` — без расхождений (тесты каждый прогон пересоздают
+  схему); права `ytlead_app` на таблицы Phase 5 и 6: SELECT есть, `CREATE` / `DROP` — `InsufficientPrivilege`;
+  frontend `npm run typecheck`, `npm run lint` (0 ошибок, прежнее предупреждение `useVirtualizer`), `npm test` — 106 (+17),
+  `next build` (15 маршрутов).
+- **Не проверено:** разбор реальных описаний YouTube (экстрактор проверен на синтетических текстах), запись
+  (`INSERT` / `UPDATE`) от роли `ytlead_app` в новые таблицы (проверены только чтение и запрет DDL), сквозной прогон
+  реальными процессами (uvicorn + воркер + `next start`), отрисовка UI в браузере (Playwright не установлен), CI.
+- **Не сделано (осознанно):** загрузка сайтов и профилей, проверка доставляемости email (MX / SMTP), проверка Telegram / VK
+  аккаунтов — это уже сетевые вызовы и вопрос согласия (Q-001, Q-002); обработка входящих отказов и `source_message_id` —
+  Phase 8 (рассылка).
 
 **VERIFICATION STATUS (этап архитектуры):**
 - Verified: версии пакетов (PyPI/npm), Procrastinate на Windows + PG16 (spike), квоты YouTube (официальная документация), модели gpt-image-2.5-flare/sunburst и линейка GPT-6 (документация OpenAI).

@@ -1,6 +1,7 @@
 /** Leads (Phase 3.7): labels, URL filters and helpers. Records keyed by API enums make `tsc` fail when the backend
  * adds a status, component or sort without a label here. */
 import type { Schemas } from "@/lib/api/client";
+import { CONTACT_TYPES } from "@/lib/contacts";
 import { enumParam, intParam, type UrlPatch } from "@/lib/url-state";
 
 export type LeadStatus = Schemas["LeadStatus"];
@@ -49,7 +50,7 @@ export const COMPONENT_HINTS: Record<ComponentKey, string> = {
   views: "Медиана просмотров по логарифмической шкале 500 → 500 тыс.",
   activity: "Давность последнего видео и число видео за 30 дней",
   growth: "Тренд просмотров и рост подписчиков по снимкам",
-  contactability: "Появится со сбором контактов (Phase 6); пока нет данных",
+  contactability: "Contactability Score (0–100) по найденным публичным контактам; по умолчанию вес 0 — в баллах не учитывается",
   niche_value: "Оценка ценности ниши из таблицы ниже (0–10)",
 };
 
@@ -84,6 +85,7 @@ export type LeadQuery = {
   min_lead_score?: number;
   max_lead_score?: number;
   min_priority?: number;
+  min_contactability?: number; // Contactability Score ≥ (Phase 6)
   min_subscribers?: number;
   max_subscribers?: number;
   min_avg_views?: number;
@@ -93,6 +95,7 @@ export type LeadQuery = {
   niche?: number[];
   tag?: number[]; // any of these tags (Phase 4)
   favorite?: boolean; // favorites of the current user (Phase 4)
+  contact_type?: Schemas["ContactType"][]; // a usable contact of any of these types (Phase 6)
   sort: LeadSort;
   order: Order;
   offset: number;
@@ -106,6 +109,7 @@ export const RANGE_KEYS = {
   min_lead_score: [0, 100],
   max_lead_score: [0, 100],
   min_priority: [0, 100],
+  min_contactability: [0, 100],
 } as const satisfies Partial<Record<keyof LeadQuery, readonly [number, number]>>;
 type RangeKey = keyof typeof RANGE_KEYS;
 
@@ -134,6 +138,9 @@ export function leadQueryFromParams(params: URLSearchParams): LeadQuery {
   const niche = ids("niche");
   const tag = ids("tag");
   const favorite = enumParam(params, "favorite", ["true", "false"] as const);
+  const contactType = [...new Set(listParam(params, "contact_type"))].filter((t): t is Schemas["ContactType"] =>
+    (CONTACT_TYPES as string[]).includes(t),
+  );
   const out: LeadQuery = {
     project_id: intParam(params, "project_id"),
     q: q || undefined,
@@ -143,6 +150,7 @@ export function leadQueryFromParams(params: URLSearchParams): LeadQuery {
     niche: niche.length ? niche : undefined,
     tag: tag.length ? tag : undefined,
     favorite: favorite === undefined ? undefined : favorite === "true",
+    contact_type: contactType.length ? contactType : undefined,
     sort: enumParam(params, "sort", LEAD_SORTS) ?? "lead_score",
     order: enumParam(params, "order", ORDERS) ?? "desc",
     offset: intParam(params, "offset") ?? 0,
@@ -155,7 +163,7 @@ export function leadQueryFromParams(params: URLSearchParams): LeadQuery {
 }
 
 const FILTER_KEYS = [
-  "project_id", "q", "status", "activity", "visual_opportunity", "niche", "tag", "favorite", ...INT_KEYS,
+  "project_id", "q", "status", "activity", "visual_opportunity", "niche", "tag", "favorite", "contact_type", ...INT_KEYS,
   ...(Object.keys(RANGE_KEYS) as RangeKey[]),
 ] as const;
 

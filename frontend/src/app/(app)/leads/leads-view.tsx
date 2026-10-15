@@ -12,6 +12,12 @@ import { Badge, Button, Card, Input, PageHeader, Pager, Select } from "@/compone
 import { LEVEL_LABELS, formatScore, opportunityTone, scoreTone } from "@/lib/analysis";
 import { LEADS_PAGE, useLeads, useProjects, useSyncLeads, useTaxonomy, type Lead } from "@/lib/api/hooks";
 import { useBulkLeads, useTags } from "@/lib/api/workflow-hooks";
+import {
+  CONTACT_TYPES,
+  CONTACT_TYPE_LABELS,
+  contactabilityTone,
+  formatContactScore,
+} from "@/lib/contacts";
 import { formatCount, formatDate } from "@/lib/format";
 import {
   ACTIVITY_LABELS,
@@ -316,6 +322,7 @@ const COLUMNS: { label: string; sort?: LeadQuery["sort"]; numeric?: boolean }[] 
   { label: "Подписчики", sort: "subscribers", numeric: true },
   { label: "Ср. просм.", sort: "views", numeric: true },
   { label: "Активность", sort: "activity" },
+  { label: "Контакты", sort: "contactability", numeric: true },
   { label: "Посл. видео", sort: "last_video" },
 ];
 
@@ -559,6 +566,15 @@ function LeadRow({
       <td className="px-3 py-2 text-right tabular-nums">{c.subscribers_hidden ? "скрыто" : formatCount(c.subscriber_count)}</td>
       <td className="px-3 py-2 text-right tabular-nums">{formatCount(c.metrics?.avg_views)}</td>
       <td className="px-3 py-2">{lead.activity_level ? ACTIVITY_LABELS[lead.activity_level] : "—"}</td>
+      <td className="px-3 py-2 text-right tabular-nums">
+        {s?.contactability_score === null || s?.contactability_score === undefined ? (
+          <span title="Контакты канала ещё не собирались">—</span>
+        ) : (
+          <Badge tone={contactabilityTone(s.contactability_score)} title="Contactability Score (0–100)">
+            {formatContactScore(s.contactability_score)}
+          </Badge>
+        )}
+      </td>
       <td className="px-3 py-2 whitespace-nowrap">{formatDate(c.metrics?.last_video_at)}</td>
     </tr>
   );
@@ -570,6 +586,7 @@ type NumberKey =
   | "min_lead_score"
   | "max_lead_score"
   | "min_priority"
+  | "min_contactability"
   | "min_subscribers"
   | "max_subscribers"
   | "min_avg_views"
@@ -581,6 +598,7 @@ const NUMBER_FILTERS: { name: NumberKey; label: string; step?: string; min: numb
   { name: "min_lead_score", label: "Lead Score от", min: 0, max: 100 },
   { name: "max_lead_score", label: "Lead Score до", min: 0, max: 100 },
   { name: "min_priority", label: "Приоритет от", min: 0, max: 100 },
+  { name: "min_contactability", label: "Контактность от (0–100)", min: 0, max: 100 },
   { name: "min_subscribers", label: "Подписчиков от", min: 0 },
   { name: "max_subscribers", label: "Подписчиков до", min: 0 },
   { name: "min_avg_views", label: "Ср. просмотров от", min: 0 },
@@ -719,6 +737,22 @@ function Filters({ query, onChange, filtered }: { query: LeadQuery; onChange: (p
           {(tags.data ?? []).map((t) => (
             <option key={t.id} value={t.id}>
               {t.name} ({t.leads})
+            </option>
+          ))}
+        </Select>
+        <Select
+          multiple
+          aria-label="Типы контактов"
+          title="Есть пригодный контакт любого из выбранных типов (Ctrl/Cmd — несколько)"
+          value={query.contact_type ?? []}
+          onChange={(e) =>
+            onChange({ contact_type: Array.from(e.currentTarget.selectedOptions, (o) => o.value).join(",") || null })
+          }
+          className="h-16 w-44 py-1"
+        >
+          {CONTACT_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {CONTACT_TYPE_LABELS[t]}
             </option>
           ))}
         </Select>

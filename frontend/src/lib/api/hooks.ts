@@ -129,6 +129,10 @@ export const qk = {
   feedbackSummary: ["feedback", "summary"] as const,
   leadGenerations: (leadId: number) => ["leads", "detail", leadId, "generations"] as const,
   references: ["references"] as const,
+  channelContacts: (channelId: number) => ["channels", "detail", channelId, "contacts"] as const,
+  contactStats: (projectId: number) => ["contacts", "stats", projectId] as const,
+  suppression: ["suppression"] as const,
+  contactabilityProfile: ["scoring", "contactability"] as const,
 };
 
 // --- auth -------------------------------------------------------------------------------------

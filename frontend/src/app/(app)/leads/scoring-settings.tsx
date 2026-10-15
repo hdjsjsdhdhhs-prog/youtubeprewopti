@@ -6,6 +6,11 @@ import { useMemo, useState } from "react";
 import { InlineError, LoadingState } from "@/components/states";
 import { Button, Card, Input, Select } from "@/components/ui";
 import {
+  useContactabilityProfile,
+  useSetContactabilityProfile,
+  type ContactabilityWeights,
+} from "@/lib/api/contacts-hooks";
+import {
   useDeleteIdealProfile,
   useIdealProfiles,
   useLeadProfile,
@@ -20,6 +25,13 @@ import {
   type PriorityWeights,
   type RescoreResult,
 } from "@/lib/api/hooks";
+import {
+  WEIGHT_KEYS,
+  WEIGHT_LABELS,
+  contactWeightsValid,
+  previewContactScore,
+  type ContactWeightKey,
+} from "@/lib/contacts";
 import {
   ACTIVITY_LABELS,
   ACTIVITY_LEVELS,
@@ -43,7 +55,93 @@ export function ScoringSettings() {
       <LeadWeightsCard canEdit={isAdmin} />
       <PriorityWeightsCard canEdit={isAdmin} />
       <IdealProfileCard />
+      <ContactabilityCard canEdit={isAdmin} />
     </div>
+  );
+}
+
+/** Contactability Score (ТЗ §19): points per available contact type, capped at 100. */
+function ContactabilityCard({ canEdit }: { canEdit: boolean }) {
+  const profile = useContactabilityProfile();
+  const save = useSetContactabilityProfile();
+  if (profile.isPending) return <Card><LoadingState /></Card>;
+  if (profile.isError) return <Card><InlineError error={profile.error} /></Card>;
+  return (
+    <ContactabilityForm
+      key={profile.data.version}
+      version={profile.data.version}
+      initial={profile.data.weights}
+      canEdit={canEdit}
+      saving={save.isPending}
+      onSave={(w) => save.mutate(w)}
+      footer={
+        <>
+          <Rescored r={save.data?.rescored} />
+          <InlineError error={save.error} />
+        </>
+      }
+    />
+  );
+}
+
+function ContactabilityForm({
+  version,
+  initial,
+  canEdit,
+  saving,
+  onSave,
+  footer,
+}: {
+  version: number;
+  initial: ContactabilityWeights;
+  canEdit: boolean;
+  saving: boolean;
+  onSave: (w: ContactabilityWeights) => void;
+  footer: React.ReactNode;
+}) {
+  const [weights, setWeights] = useState<Record<ContactWeightKey, number>>(() => ({ ...initial }));
+  const valid = contactWeightsValid(weights);
+  const all = previewContactScore(["email", "telegram", "website", "vk", "other"], weights);
+  return (
+    <Card className="space-y-3">
+      <div>
+        <h2 className="text-sm font-semibold">Contactability Score</h2>
+        <p className="text-xs text-zinc-500">
+          Версия {version === 0 ? "по умолчанию" : version}. Баллы за каждый доступный тип контакта (тип считается один
+          раз), максимум 100. Чтобы контактность влияла на Lead Score или Приоритет, задайте вес компонента
+          «Контактность» в соседних карточках — по умолчанию он 0.
+        </p>
+      </div>
+      <div className="grid grid-cols-[1fr_5.5rem] items-center gap-x-2 gap-y-1.5 text-sm">
+        {WEIGHT_KEYS.map((k) => (
+          <label key={k} className="contents">
+            <span>{WEIGHT_LABELS[k]}</span>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              step="1"
+              value={weights[k]}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const v = e.currentTarget.value === "" ? 0 : Number(e.currentTarget.value);
+                setWeights((w) => ({ ...w, [k]: v }));
+              }}
+              className="h-8 text-right tabular-nums"
+            />
+          </label>
+        ))}
+      </div>
+      <p className="text-xs text-zinc-500">Все типы вместе: {all} из 100.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={!canEdit || !valid || saving} onClick={() => onSave(weights)}>
+          Сохранить и пересчитать
+        </Button>
+        {!canEdit ? <span className="text-xs text-zinc-500">Менять веса может администратор.</span> : null}
+        {!valid ? <span className="text-xs text-red-600">Нужен хотя бы один вес больше 0; значения 0–100.</span> : null}
+        {footer}
+      </div>
+    </Card>
   );
 }
 
@@ -276,7 +374,7 @@ function IdealProfileCard() {
         <h2 className="text-sm font-semibold">Профиль идеального лида</h2>
         <p className="text-xs text-zinc-500">
           Channel Fit = доля заданных критериев, которым канал соответствует (по профилю «по умолчанию»). Критерий без
-          данных считается несовпавшим; контакты учитываются с Phase 6.
+          данных (в том числе контакты, которые ещё не собирались) считается несовпавшим.
         </p>
       </div>
       {profiles.isPending ? <LoadingState /> : <InlineError error={profiles.error} />}
@@ -386,7 +484,7 @@ function IdealProfileForm({
         <span>Контакты</span>
         <span className="flex gap-3 text-xs">
           {(["telegram", "email"] as const).map((t) => (
-            <label key={t} className="inline-flex items-center gap-1" title="Учитывается с Phase 6 (сбор контактов)">
+            <label key={t} className="inline-flex items-center gap-1" title="У канала есть пригодный контакт этого типа">
               <input
                 type="checkbox"
                 checked={form.contact_types.includes(t)}

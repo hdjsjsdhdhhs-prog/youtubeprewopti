@@ -11,6 +11,7 @@ from app.core.db import get_sessionmaker
 from app.core.logging import get_logger
 from app.domains.analysis.channel_pipeline import run_channel_analysis
 from app.domains.analysis.pipeline import run_thumbnail_analysis
+from app.domains.contacts.service import run_contact_extraction
 from app.domains.discovery.quota import CommittingQuota
 from app.domains.discovery.service import run_discovery
 from app.domains.generation.pipeline import run_thumbnail_generation
@@ -165,6 +166,14 @@ async def thumbnail_generation(ctx: JobRunContext) -> dict[str, Any]:
         return await run(override)
     async with open_ai_provider(settings) as provider:
         return await run(provider)
+
+
+@job_task(name=JobType.CONTACT_EXTRACTION.value, queue=JobQueue.BULK)
+async def contact_extraction(ctx: JobRunContext) -> dict[str, Any]:
+    """params: ``{"project_id", "channel_ids", "rescan"}`` — see ``contacts.service.run_contact_extraction``.
+    Deterministic and free (no network, no AI); the project's leads are rescored at the end."""
+    result = await run_contact_extraction(get_sessionmaker(), params=ctx.params, progress=ctx.progress)
+    return await _sync_leads(ctx, result)
 
 
 @queue_app.periodic(cron="* * * * *")

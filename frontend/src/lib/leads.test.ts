@@ -60,6 +60,19 @@ describe("leadQueryFromParams", () => {
   it("clears every filter key and the page", () => {
     expect(CLEAR_LEAD_FILTERS).toMatchObject({ status: null, min_thumbnail_score: null, niche: null, offset: null });
   });
+
+  it("parses the contact filters of Phase 6 and drops unknown types / out-of-range scores", () => {
+    const q = leadQueryFromParams(new URLSearchParams("contact_type=telegram,fax,email,telegram&min_contactability=60"));
+    expect(q).toMatchObject({ contact_type: ["telegram", "email"], min_contactability: 60 });
+    expect(hasLeadFilters(q)).toBe(true);
+    expect(hasLeadFilters(leadQueryFromParams(new URLSearchParams("min_contactability=0")))).toBe(true);
+
+    const bad = leadQueryFromParams(new URLSearchParams("contact_type=fax&min_contactability=101"));
+    expect(bad.contact_type).toBeUndefined();
+    expect(bad.min_contactability).toBeUndefined();
+    expect(hasLeadFilters(bad)).toBe(false);
+    expect(CLEAR_LEAD_FILTERS).toMatchObject({ contact_type: null, min_contactability: null });
+  });
 });
 
 describe("sorting", () => {

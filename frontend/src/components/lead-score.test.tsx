@@ -34,6 +34,8 @@ const score: LeadScore = {
   lead_profile_version: 0,
   priority_profile_version: 0,
   thumbnail_profile_version: 0,
+  contactability_profile_version: 0,
+  contactability_score: null,
   ideal_lead_profile_id: null,
   created_at: "2026-10-14T10:00:00Z",
   components: [
@@ -46,7 +48,7 @@ const score: LeadScore = {
       reason: "средний балл превью 2.00/10 по 3 превью",
     }),
     component({ key: "channel_fit", max: "20.00", reason: "нет данных: профиль идеального лида не задан" }),
-    component({ key: "contactability", reason: "нет данных: сбор контактов появится в Phase 6" }),
+    component({ key: "contactability", reason: "нет данных: контакты канала ещё не собирались" }),
   ],
 };
 
@@ -64,7 +66,7 @@ describe("LeadScoreBreakdown", () => {
     expect(items[1]).toHaveTextContent("0 / 20");
     expect(items[1]).toHaveTextContent("профиль идеального лида не задан");
     expect(items[2]).toHaveTextContent("вес 0");
-    expect(items[2]).toHaveTextContent("Phase 6");
+    expect(items[2]).toHaveTextContent("ещё не собирались");
   });
 
   it("shows a dash for a lead without a score", () => {

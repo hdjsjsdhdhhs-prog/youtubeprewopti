@@ -632,6 +632,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/scoring-profiles/contactability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Contactability Profile
+         * @description Contactability Score (§19): points per available contact type, capped at 100 (version 0 = defaults).
+         */
+        get: operations["get_contactability_profile_api_scoring_profiles_contactability_get"];
+        /**
+         * Set Contactability Profile
+         * @description Save as the next version and rescore all leads of the workspace.
+         */
+        put: operations["set_contactability_profile_api_scoring_profiles_contactability_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/leads": {
         parameters: {
             query?: never;
@@ -644,8 +668,9 @@ export interface paths {
          * @description Leads of the workspace; all filters are optional and AND-ed (§9). ``activity`` = at least this level
          *     (high: last video ≤ 14 days and ≥ 4 videos in 30 days; medium: last video ≤ 30 days). ``tag`` = any of
          *     these tags; ``favorite`` = the channel is (``true``) / is not (``false``) a favorite of the current
-         *     user. Lead Score / Priority sort and filter by the human value where one is set (§47). Default order:
-         *     highest Lead Score first.
+         *     user. Lead Score / Priority sort and filter by the human value where one is set (§47). ``contact_type``
+         *     = the channel has a usable contact of any of these types (Phase 6); ``min_contactability`` and
+         *     ``sort=contactability`` use the Contactability Score (§19). Default order: highest Lead Score first.
          */
         get: operations["list_leads_api_leads_get"];
         put?: never;
@@ -990,6 +1015,157 @@ export interface paths {
         head?: never;
         /** Update Reference */
         patch: operations["update_reference_api_references__reference_id__patch"];
+        trace?: never;
+    };
+    "/api/channels/{channel_id}/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Channel Contacts
+         * @description Public contacts found in the channel's own texts + this workspace's manual ones, with the workspace's
+         *     statuses. ``status``: ``not_scanned`` / ``found`` / ``not_found`` (scanned, nothing usable — ТЗ §18).
+         */
+        get: operations["channel_contacts_api_channels__channel_id__contacts_get"];
+        put?: never;
+        /**
+         * Add Contact
+         * @description A contact found by hand (visible to this workspace only). 422 ``invalid_contact``, 409
+         *     ``contact_exists``.
+         */
+        post: operations["add_contact_api_channels__channel_id__contacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/channels/{channel_id}/contacts/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Scan Channel
+         * @description Scan the channel description and the newest stored video descriptions now (deterministic, free, no
+         *     network) and rescore the lead.
+         */
+        post: operations["scan_channel_api_channels__channel_id__contacts_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contacts/{contact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Contact
+         * @description Only manual contacts (409 ``contact_not_manual``: mark a public one invalid instead).
+         */
+        delete: operations["delete_contact_api_contacts__contact_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Set Contact Status
+         * @description This workspace's status of the contact. ``opted_out`` adds the value to the suppression list and is
+         *     final here (409 ``opted_out_final``).
+         */
+        patch: operations["set_contact_status_api_contacts__contact_id__patch"];
+        trace?: never;
+    };
+    "/api/projects/{project_id}/contacts/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Project Contact Stats */
+        get: operations["project_contact_stats_api_projects__project_id__contacts_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/contacts/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Scan Project
+         * @description One ``contact_extraction`` job for the project's channels not scanned with the current extractor
+         *     (``rescan`` — all of them), at most 5000 (``remaining``). Leads are rescored when it finishes.
+         */
+        post: operations["scan_project_api_projects__project_id__contacts_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/suppression-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Suppression */
+        get: operations["list_suppression_api_suppression_list_get"];
+        put?: never;
+        /**
+         * Add Suppression
+         * @description Never contact this value (idempotent). Leads of channels with it are rescored.
+         */
+        post: operations["add_suppression_api_suppression_list_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/suppression-list/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Suppression
+         * @description Admin only: undoes an opt-out (audited).
+         */
+        delete: operations["remove_suppression_api_suppression_list__entry_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/ai/status": {
@@ -1759,6 +1935,23 @@ export interface components {
             /** Improvement Opportunity */
             improvement_opportunity: ("low" | "medium" | "high") | null;
         };
+        /** ChannelContacts */
+        ChannelContacts: {
+            /** Channel Id */
+            channel_id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_scanned" | "found" | "not_found";
+            scan: components["schemas"]["ContactScanOut"] | null;
+            /** Contactability Score */
+            contactability_score: string | null;
+            /** Usable Types */
+            usable_types: components["schemas"]["ContactType"][];
+            /** Items */
+            items: components["schemas"]["ContactOut"][];
+        };
         /** ChannelDetail */
         ChannelDetail: {
             /** Id */
@@ -1986,6 +2179,183 @@ export interface components {
             }[];
             /** Visual Summary */
             visual_summary: string | null;
+        };
+        /** ContactChange */
+        ContactChange: {
+            contacts: components["schemas"]["ChannelContacts"];
+            rescored: components["schemas"]["RescoreResult"];
+        };
+        /** ContactOut */
+        ContactOut: {
+            /** Id */
+            id: number;
+            type: components["schemas"]["ContactType"];
+            /** Value */
+            value: string;
+            /** Value Normalized */
+            value_normalized: string;
+            source: components["schemas"]["ContactSource"];
+            /** Source Url */
+            source_url: string | null;
+            /** Source Video Id */
+            source_video_id: number | null;
+            /** Seen In Videos */
+            seen_in_videos: number;
+            /** Confidence */
+            confidence: string;
+            status: components["schemas"]["ContactStatus"];
+            /** Present */
+            present: boolean;
+            /** Suppressed */
+            suppressed: boolean;
+            /** Usable */
+            usable: boolean;
+            /** Is Manual */
+            is_manual: boolean;
+            /** Note */
+            note: string;
+            /**
+             * Discovered At
+             * Format: date-time
+             */
+            discovered_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Verified At */
+            verified_at: string | null;
+        };
+        /** ContactScanOut */
+        ContactScanOut: {
+            /** Extractor Version */
+            extractor_version: number;
+            /** Texts Scanned */
+            texts_scanned: number;
+            /** Contacts Found */
+            contacts_found: number;
+            /**
+             * Scanned At
+             * Format: date-time
+             */
+            scanned_at: string;
+        };
+        /** ContactScanStart */
+        ContactScanStart: {
+            /**
+             * Rescan
+             * @default false
+             */
+            rescan: boolean;
+        };
+        /** ContactScanStartResult */
+        ContactScanStartResult: {
+            job: components["schemas"]["JobRunOut"] | null;
+            /** Created */
+            created: boolean;
+            /** Channels */
+            channels: number;
+            /** Remaining */
+            remaining: number;
+        };
+        /**
+         * ContactSource
+         * @enum {string}
+         */
+        ContactSource: "youtube_about" | "youtube_description" | "video_description" | "website" | "linked_profile" | "manual";
+        /**
+         * ContactStats
+         * @description Contacts of a project's channels (workspace view).
+         */
+        ContactStats: {
+            /** Channels */
+            channels: number;
+            /** Scanned */
+            scanned: number;
+            /** With Contacts */
+            with_contacts: number;
+            /** Not Found */
+            not_found: number;
+            /** By Type */
+            by_type: {
+                [key: string]: number;
+            };
+        };
+        /**
+         * ContactStatus
+         * @enum {string}
+         */
+        ContactStatus: "public" | "verified" | "unverified" | "invalid" | "opted_out";
+        /**
+         * ContactStatusIn
+         * @description ``opted_out`` also adds the value to the suppression list; it is final for this endpoint (remove the
+         *     suppression entry to undo, admin).
+         */
+        ContactStatusIn: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "public" | "verified" | "unverified" | "invalid" | "opted_out";
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /**
+         * ContactType
+         * @enum {string}
+         */
+        ContactType: "email" | "telegram" | "vk" | "instagram" | "website" | "other";
+        /** ContactabilityProfileOut */
+        ContactabilityProfileOut: {
+            /** Version */
+            version: number;
+            /** Is Default */
+            is_default: boolean;
+            weights: components["schemas"]["ContactabilityWeights"];
+        };
+        /** ContactabilityProfileSaved */
+        ContactabilityProfileSaved: {
+            /** Version */
+            version: number;
+            /** Is Default */
+            is_default: boolean;
+            weights: components["schemas"]["ContactabilityWeights"];
+            rescored: components["schemas"]["RescoreResult"];
+        };
+        /**
+         * ContactabilityWeights
+         * @description Points per available contact type; the score is capped at 100.
+         */
+        ContactabilityWeights: {
+            /**
+             * Email
+             * @default 30
+             */
+            email: number;
+            /**
+             * Telegram
+             * @default 30
+             */
+            telegram: number;
+            /**
+             * Website
+             * @default 20
+             */
+            website: number;
+            /**
+             * Vk
+             * @default 10
+             */
+            vk: number;
+            /**
+             * Other
+             * @default 10
+             */
+            other: number;
         };
         /**
          * DecisionStats
@@ -2346,7 +2716,8 @@ export interface components {
          * IdealLeadCriteria
          * @description What a perfect lead looks like; Channel Fit = share of the set criteria the channel meets. An
          *     unset criterion is ignored; a set one without data (e.g. thumbnails not audited yet) counts as not met.
-         *     ``contact_types`` is evaluated once contacts exist (Phase 6) — until then it is ignored.
+         *     ``contact_types`` — the channel has a usable contact of any of these types (no data until its contacts
+         *     were scanned).
          */
         IdealLeadCriteria: {
             /** Min Subscribers */
@@ -2666,6 +3037,10 @@ export interface components {
             tag?: number[];
             /** Favorite */
             favorite?: boolean | null;
+            /** Contact Type */
+            contact_type?: components["schemas"]["ContactType"][];
+            /** Min Contactability */
+            min_contactability?: number | string | null;
         };
         /** LeadGenerations */
         LeadGenerations: {
@@ -2789,8 +3164,12 @@ export interface components {
             priority_profile_version: number;
             /** Thumbnail Profile Version */
             thumbnail_profile_version: number;
+            /** Contactability Profile Version */
+            contactability_profile_version: number;
             /** Ideal Lead Profile Id */
             ideal_lead_profile_id: number | null;
+            /** Contactability Score */
+            contactability_score: string | null;
             /** Components */
             components: components["schemas"]["ScoreComponentOut"][];
             /**
@@ -2922,6 +3301,27 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /**
+         * ManualContactIn
+         * @description ``value`` is normalised by type (``@user`` / ``t.me/user`` for Telegram, ``vk.com/id`` for VK …);
+         *     a value the type does not accept is 422 ``invalid_contact``.
+         */
+        ManualContactIn: {
+            type: components["schemas"]["ContactType"];
+            /** Value */
+            value: string;
+            /**
+             * Status
+             * @default unverified
+             * @enum {string}
+             */
+            status: "verified" | "unverified";
+            /**
+             * Note
+             * @default
+             */
+            note: string;
         };
         /** MeResponse */
         MeResponse: {
@@ -3628,6 +4028,57 @@ export interface components {
              */
             created_at: string;
         };
+        /** SuppressionIn */
+        SuppressionIn: {
+            type: components["schemas"]["ContactType"];
+            /** Value */
+            value: string;
+            /**
+             * Reason
+             * @default manual
+             * @enum {string}
+             */
+            reason: "opt_out" | "manual" | "complaint" | "bounce";
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** SuppressionList */
+        SuppressionList: {
+            /** Items */
+            items: components["schemas"]["SuppressionOut"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** SuppressionOut */
+        SuppressionOut: {
+            /** Id */
+            id: number;
+            type: components["schemas"]["ContactType"];
+            /** Value Normalized */
+            value_normalized: string;
+            reason: components["schemas"]["SuppressionReason"];
+            /** Note */
+            note: string;
+            /** Created By */
+            created_by: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * SuppressionReason
+         * @enum {string}
+         */
+        SuppressionReason: "opt_out" | "bounce" | "manual" | "complaint";
         /** TagAction */
         TagAction: {
             /**
@@ -5364,6 +5815,59 @@ export interface operations {
             };
         };
     };
+    get_contactability_profile_api_scoring_profiles_contactability_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactabilityProfileOut"];
+                };
+            };
+        };
+    };
+    set_contactability_profile_api_scoring_profiles_contactability_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactabilityWeights"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactabilityProfileSaved"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_leads_api_leads_get: {
         parameters: {
             query?: {
@@ -5385,6 +5889,8 @@ export interface operations {
                 niche?: number[] | null;
                 tag?: number[] | null;
                 favorite?: boolean | null;
+                contact_type?: components["schemas"]["ContactType"][] | null;
+                min_contactability?: number | string | null;
                 sort?: components["schemas"]["LeadSort"];
                 order?: components["schemas"]["SortOrder"];
                 limit?: number;
@@ -6099,6 +6605,329 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ReferenceOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    channel_contacts_api_channels__channel_id__contacts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelContacts"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_contact_api_channels__channel_id__contacts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualContactIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scan_channel_api_channels__channel_id__contacts_scan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_contact_api_contacts__contact_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_contact_status_api_contacts__contact_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactStatusIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    project_contact_stats_api_projects__project_id__contacts_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactStats"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scan_project_api_projects__project_id__contacts_scan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactScanStart"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactScanStartResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_suppression_api_suppression_list_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuppressionList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_suppression_api_suppression_list_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuppressionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuppressionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_suppression_api_suppression_list__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

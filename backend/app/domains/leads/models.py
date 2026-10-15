@@ -93,6 +93,7 @@ class LeadScore(IdMixin, TimestampMixin, Base):
         CheckConstraint("priority_score BETWEEN 0 AND 100", name="priority_score_range"),
         CheckConstraint("data_coverage BETWEEN 0 AND 100", name="data_coverage_range"),
         CheckConstraint("avg_thumbnail_score BETWEEN 1 AND 10", name="avg_thumbnail_score_range"),
+        CheckConstraint("contactability_score BETWEEN 0 AND 100", name="contactability_score_range"),
         *(CheckConstraint(f"{c} BETWEEN 0 AND 100", name=f"{c}_range") for c in COMPONENTS),
     )
     lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), nullable=False)
@@ -101,6 +102,9 @@ class LeadScore(IdMixin, TimestampMixin, Base):
     lead_profile_version: Mapped[int] = mapped_column(Integer, nullable=False)
     priority_profile_version: Mapped[int] = mapped_column(Integer, nullable=False)
     thumbnail_profile_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    contactability_profile_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     ideal_lead_profile_id: Mapped[int | None] = mapped_column(
         ForeignKey("ideal_lead_profiles.id", ondelete="SET NULL")
     )
@@ -116,6 +120,8 @@ class LeadScore(IdMixin, TimestampMixin, Base):
     contactability: Mapped[Decimal] = mapped_column(LEAD_SCORE, nullable=False)
     niche_value: Mapped[Decimal] = mapped_column(LEAD_SCORE, nullable=False)
     avg_thumbnail_score: Mapped[Decimal | None] = mapped_column(Numeric(4, 2), index=True)
+    # ТЗ §19 Contactability Score 0–100 (workspace contactability weights); NULL = contacts never scanned
+    contactability_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), index=True)
     components: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
 
 

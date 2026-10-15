@@ -31,6 +31,7 @@ from app.core.errors import ConflictError, NotFoundError
 from app.core.state_machine import LeadStatus
 from app.domains.analysis import scoring as thumb_scoring
 from app.domains.analysis.models import AILevel, ChannelAnalysis, ScoringKind, ThumbnailAnalysis
+from app.domains.contacts import service as contacts
 from app.domains.favorites.models import FavoriteEntity
 from app.domains.favorites.service import favorite_ids, is_favorite_condition
 from app.domains.feedback.models import ScoreOverride, ScoreTarget
@@ -295,6 +296,7 @@ async def gather_inputs(
         if node is not None:
             niches.setdefault(cid, set()).add(node)
     parents = await _ancestors(db) if niches else {}
+    contacts_scanned, contact_types = await contacts.contact_inputs(db, workspace_id, ids)
 
     out: dict[int, scoring.LeadInputs] = {}
     for channel, m in base.tuples():
@@ -317,6 +319,8 @@ async def gather_inputs(
             thumbnails_human_scored=human,
             visual_opportunity=opportunity.get(channel.id),
             niche_ids=_with_ancestors(niches.get(channel.id, ()), parents),
+            contacts_scanned=channel.id in contacts_scanned,
+            contact_types=frozenset(contact_types.get(channel.id, ())),
         )
     return out
 
@@ -374,13 +378,17 @@ async def _create_missing(db: AsyncSession, workspace_id: int, project_id: int |
     return len(created)
 
 
-def _score_values(b: scoring.ScoreBreakdown, inputs: scoring.LeadInputs) -> dict[str, Any]:
+def _score_values(
+    b: scoring.ScoreBreakdown, inputs: scoring.LeadInputs, comps: dict[str, scoring.Component]
+) -> dict[str, Any]:
+    contact_score = comps["contactability"].inputs.get("score")
     return {
         "total": b.total,
         "priority_score": b.priority,
         "data_coverage": b.data_coverage,
         **b.points,
         "avg_thumbnail_score": inputs.avg_thumbnail_score,
+        "contactability_score": Decimal(contact_score) if contact_score is not None else None,
         "components": b.components,
     }
 
@@ -391,10 +399,12 @@ _COMPARED = (
     "data_coverage",
     *scoring.COMPONENTS,
     "avg_thumbnail_score",
+    "contactability_score",
     "components",
     "lead_profile_version",
     "priority_profile_version",
     "thumbnail_profile_version",
+    "contactability_profile_version",
     "ideal_lead_profile_id",
 )
 
@@ -432,10 +442,13 @@ async def sync_leads(
     ilp_row = await default_ideal_profile(db, workspace_id)
     ilp = scoring.IdealLeadCriteria.model_validate(ilp_row.criteria) if ilp_row is not None else None
     niche_values = {int(k): float(v) for k, v in lead_w.weights.niche_values.items()}
+    contact_w = await contacts.active_contact_weights(db, workspace_id)
+    contact_weights = contact_w.weights.as_dict()
     versions = {
         "lead_profile_version": lead_w.version,
         "priority_profile_version": prio_w.version,
         "thumbnail_profile_version": thumb.version,
+        "contactability_profile_version": contact_w.version,
         "ideal_lead_profile_id": ilp_row.id if ilp_row else None,
     }
 
@@ -473,10 +486,10 @@ async def sync_leads(
                 continue
             if lead.status == LeadStatus.DISCOVERED and i.thumbnails_audited > 0:
                 analyzed += await _auto_analyzed(db, lead, now)
-            comps = scoring.compute_components(i, ilp, niche_values, now)
+            comps = scoring.compute_components(i, ilp, niche_values, now, contact_weights)
             b = scoring.score(comps, lead_w.weights.component_weights(), prio_w.weights.component_weights())
             system_tags[lead.id] = tags.system_tag_keys(i, human.get(lead.id, {}).get("total", b.total), now)
-            values = _score_values(b, i) | versions
+            values = _score_values(b, i, comps) | versions
             if _same(current.get(lead.id), values):
                 unchanged += 1
                 continue
@@ -645,6 +658,7 @@ async def _conditions(
         (LeadScore.avg_thumbnail_score, f.min_thumbnail_score, f.max_thumbnail_score),
         (EFFECTIVE_TOTAL, f.min_lead_score, f.max_lead_score),
         (EFFECTIVE_PRIORITY, f.min_priority, None),
+        (LeadScore.contactability_score, f.min_contactability, None),
     ):
         if lo is not None:
             where.append(column >= lo)
@@ -661,6 +675,8 @@ async def _conditions(
     if f.favorite is not None:
         fav = is_favorite_condition(workspace_id, user_id, FavoriteEntity.CHANNEL, Lead.channel_id)
         where.append(fav if f.favorite else ~fav)
+    if f.contact_type:
+        where.append(contacts.has_usable_contact(workspace_id, Lead.channel_id, f.contact_type))
     where.extend(
         await channel_filter_conditions(
             db,
@@ -733,7 +749,7 @@ async def list_leads(
         LeadSort.VIEWS: ChannelMetrics.avg_views,
         LeadSort.SUBSCRIBERS: Channel.subscriber_count,
         LeadSort.ACTIVITY: LeadScore.activity,
-        LeadSort.CONTACTABILITY: LeadScore.contactability,
+        LeadSort.CONTACTABILITY: LeadScore.contactability_score,
         LeadSort.LAST_VIDEO: ChannelMetrics.last_video_at,
         LeadSort.CREATED: Lead.created_at,
     }[sort]

@@ -47,7 +47,7 @@ def test_perfect_lead_scores_100_and_explains_points_out_of_max():
     comps = s.compute_components(full_inputs(), ilp, {1: 10}, NOW)
     b = s.score(comps, LeadWeights().component_weights(), PriorityWeights().component_weights())
     assert b.total == Decimal("100.00") and b.priority == Decimal("100.00")
-    # contactability: no data (Phase 6), but its weight is 0 => full coverage
+    # contactability: contacts never scanned => no data, but its weight is 0 => full coverage
     assert b.data_coverage == Decimal("100.00")
     by_key = {c["key"]: c for c in b.components}
     assert [c["key"] for c in b.components] == list(s.COMPONENTS)
@@ -55,7 +55,8 @@ def test_perfect_lead_scores_100_and_explains_points_out_of_max():
         by_key["thumbnail_opportunity"]["points"] == "25.00"
         and by_key["thumbnail_opportunity"]["max"] == "25.00"
     )
-    assert by_key["contactability"]["has_data"] is False and "Phase 6" in by_key["contactability"]["reason"]
+    assert by_key["contactability"]["has_data"] is False
+    assert "ещё не собирались" in by_key["contactability"]["reason"]
     assert "совпало 4 из 4" in by_key["channel_fit"]["reason"]
 
 
@@ -136,7 +137,7 @@ def test_niche_value_takes_best_matching_node():
     assert c.fraction == pytest.approx(0.8) and c.inputs == {"taxonomy_node_id": 3, "value": 8}
 
 
-def test_channel_fit_counts_unknown_as_not_met_and_ignores_contacts():
+def test_channel_fit_counts_unknown_as_not_met_contacts_included():
     ilp = s.IdealLeadCriteria(
         min_subscribers=10_000,
         max_subscribers=100_000,
@@ -148,13 +149,61 @@ def test_channel_fit_counts_unknown_as_not_met_and_ignores_contacts():
     )
     i = s.LeadInputs(subscribers=50_000, avg_views=5_000, country="US", language="en-GB")
     c = s.channel_fit(i, ilp, NOW)
-    # met: subscribers, country, language; missed: views; unknown: thumbnail score
-    assert c.fraction == pytest.approx(3 / 5)
+    # met: subscribers, country, language; missed: views; unknown: thumbnail score, contacts (not scanned yet)
+    assert c.fraction == pytest.approx(3 / 6)
     assert c.inputs["missed"] == ["средние просмотры ≥ 20 000"]
-    assert c.inputs["unknown"] == ["балл превью ≤ 6"]
-    assert "контакты не учитываются" in c.reason
+    assert c.inputs["unknown"] == ["балл превью ≤ 6", "контакт: telegram"]
     assert s.channel_fit(i, None, NOW).fraction is None
-    assert s.channel_fit(i, s.IdealLeadCriteria(contact_types=["email"]), NOW).fraction is None
+    assert s.channel_fit(i, s.IdealLeadCriteria(contact_types=["email"]), NOW).fraction == 0.0
+
+
+def test_channel_fit_contact_criterion_uses_usable_contacts_of_scanned_channels():
+    ilp = s.IdealLeadCriteria(contact_types=["telegram", "email"])
+    scanned_none = s.LeadInputs(contacts_scanned=True)
+    c = s.channel_fit(scanned_none, ilp, NOW)
+    assert c.fraction == 0.0 and c.inputs["missed"] == ["контакт: telegram или email"]
+    has_email = s.LeadInputs(contacts_scanned=True, contact_types=frozenset({"email"}))
+    c = s.channel_fit(has_email, ilp, NOW)
+    assert c.fraction == 1.0 and not c.inputs.get("unknown")
+    # the types of a channel that was never scanned are not trusted
+    unscanned = s.LeadInputs(contact_types=frozenset({"email"}))
+    assert s.channel_fit(unscanned, ilp, NOW).fraction == 0.0
+
+
+def test_contactability_component_scanned_vs_never_scanned():
+    never = s.contactability(s.LeadInputs())
+    assert never.fraction is None and "ещё не собирались" in never.reason
+
+    nothing = s.contactability(s.LeadInputs(contacts_scanned=True))
+    assert nothing.fraction == 0.0 and nothing.inputs == {"score": "0.00", "types": []}
+    assert "не найдены" in nothing.reason
+
+    both = s.contactability(
+        s.LeadInputs(contacts_scanned=True, contact_types=frozenset({"email", "telegram"}))
+    )
+    assert both.fraction == pytest.approx(0.6) and both.inputs["score"] == "60.00"
+    assert both.inputs["types"] == ["email", "telegram"]
+    assert "60/100" in both.reason and "email +30" in both.reason and "Telegram +30" in both.reason
+
+    custom = s.contactability(
+        s.LeadInputs(contacts_scanned=True, contact_types=frozenset({"vk"})),
+        {"email": 0, "telegram": 0, "website": 0, "vk": 100, "other": 0},
+    )
+    assert custom.fraction == 1.0
+
+
+def test_contactability_counts_towards_the_lead_score_only_with_weight():
+    i = full_inputs(contacts_scanned=True, contact_types=frozenset({"email", "telegram", "website"}))
+    comps = s.compute_components(i, None, {}, NOW)
+    default = s.score(comps, LeadWeights().component_weights(), PriorityWeights().component_weights())
+    assert comps["contactability"].fraction == pytest.approx(0.8)
+    assert default.points["contactability"] == 0  # default weight 0: contacts never change a score unasked
+    weighted = s.score(
+        comps,
+        LeadWeights(contactability=20).component_weights(),
+        PriorityWeights().component_weights(),
+    )
+    assert weighted.points["contactability"] > 0
 
 
 def test_custom_weights_normalise_to_100_and_priority_is_independent():

@@ -11,7 +11,10 @@ short reason; a score multiplies the fractions by the workspace's weights:
 A component without data scores 0 points and says so («нет данных»): a lead is never ranked up because
 something is unknown. ``data_coverage`` = share of the Lead Score maximum backed by data.
 
-Contactability has no data until contacts are collected (Phase 6); its default weight is 0.
+Contactability (Phase 6) is the ТЗ §19 Contactability Score of the channel's usable contacts
+(``contacts.scoring``) / 100; no data until the channel's texts were scanned, and a scan that found nothing
+is real data (0, «not_found»). Its default weight in the Lead / Priority Score stays 0: giving it points
+changes every lead's score, so it is the workspace's choice (scoring settings).
 """
 
 from __future__ import annotations
@@ -25,6 +28,8 @@ from enum import StrEnum
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+from app.domains.contacts import scoring as contact_scoring
 
 COMPONENTS: tuple[str, ...] = (
     "thumbnail_opportunity",
@@ -118,7 +123,8 @@ LanguageCode = Annotated[
 class IdealLeadCriteria(BaseModel):
     """What a perfect lead looks like; Channel Fit = share of the set criteria the channel meets. An
     unset criterion is ignored; a set one without data (e.g. thumbnails not audited yet) counts as not met.
-    ``contact_types`` is evaluated once contacts exist (Phase 6) — until then it is ignored."""
+    ``contact_types`` — the channel has a usable contact of any of these types (no data until its contacts
+    were scanned)."""
 
     model_config = ConfigDict(extra="forbid")
     min_subscribers: int | None = Field(default=None, ge=0)
@@ -167,6 +173,8 @@ class LeadInputs:
     thumbnails_human_scored: int = 0  # of thumbnails_audited: with a human overall / redesign value
     visual_opportunity: str | None = None  # current comparative channel audit (3.6)
     niche_ids: frozenset[int] = field(default_factory=frozenset)  # discovery niches + their ancestors
+    contacts_scanned: bool = False  # the channel's texts were scanned for contacts (Phase 6)
+    contact_types: frozenset[str] = field(default_factory=frozenset)  # types of usable contacts (workspace)
 
 
 @dataclass(frozen=True)
@@ -289,8 +297,23 @@ def growth(i: LeadInputs) -> Component:
     )
 
 
-def contactability(_: LeadInputs) -> Component:
-    return Component("contactability", None, "нет данных: сбор контактов появится в Phase 6")
+def contactability(i: LeadInputs, weights: Mapping[str, float] | None = None) -> Component:
+    """ТЗ §19 Contactability Score / 100; ``inputs.score`` is the score itself (stored on the lead score)."""
+    if not i.contacts_scanned:
+        return Component("contactability", None, "нет данных: контакты канала ещё не собирались")
+    w = weights if weights is not None else contact_scoring.DEFAULT_CONTACTABILITY_WEIGHTS
+    value = contact_scoring.contactability_score(i.contact_types, w)
+    types = sorted(i.contact_types)
+    if not types:
+        return Component(
+            "contactability", 0.0, "публичные контакты не найдены (not_found)", {"score": "0.00", "types": []}
+        )
+    return Component(
+        "contactability",
+        _clamp(float(value) / 100),
+        f"Contactability {float(value):g}/100: {contact_scoring.describe(types, w)}",
+        {"score": str(value), "types": types},
+    )
 
 
 def niche_value(i: LeadInputs, values: Mapping[int, float]) -> Component:
@@ -370,6 +393,13 @@ def channel_fit(i: LeadInputs, ilp: IdealLeadCriteria | None, now: datetime) -> 
                 None if i.language is None else _language_matches(i.language, ilp.languages),
             )
         )
+    if ilp.contact_types:
+        checks.append(
+            (
+                "контакт: " + " или ".join(ilp.contact_types),
+                bool(i.contact_types & set(ilp.contact_types)) if i.contacts_scanned else None,
+            )
+        )
     if not checks:
         return Component("channel_fit", None, "нет данных: в профиле идеального лида нет критериев")
     met = [name for name, ok in checks if ok]
@@ -380,8 +410,6 @@ def channel_fit(i: LeadInputs, ilp: IdealLeadCriteria | None, now: datetime) -> 
         parts.append("не совпало: " + ", ".join(missed))
     if unknown:
         parts.append("нет данных: " + ", ".join(unknown))
-    if ilp.contact_types:
-        parts.append("контакты не учитываются до Phase 6")
     return Component(
         "channel_fit",
         len(met) / len(checks),
@@ -391,7 +419,11 @@ def channel_fit(i: LeadInputs, ilp: IdealLeadCriteria | None, now: datetime) -> 
 
 
 def compute_components(
-    i: LeadInputs, ilp: IdealLeadCriteria | None, niche_values: Mapping[int, float], now: datetime
+    i: LeadInputs,
+    ilp: IdealLeadCriteria | None,
+    niche_values: Mapping[int, float],
+    now: datetime,
+    contact_weights: Mapping[str, float] | None = None,
 ) -> dict[str, Component]:
     comps = [
         thumbnail_opportunity(i),
@@ -400,7 +432,7 @@ def compute_components(
         views(i),
         activity(i, now),
         growth(i),
-        contactability(i),
+        contactability(i, contact_weights),
         niche_value(i, niche_values),
     ]
     return {c.key: c for c in comps}

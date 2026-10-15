@@ -360,7 +360,18 @@ async def test_ideal_lead_profile_drives_channel_fit(client, db, world, auth):
     assert created["is_default"] and created["rescored"]["scores_changed"] == 3
     page = _by_title(await _leads(client))
     fit = {c["key"]: c for c in page["Alpha"]["score"]["components"]}["channel_fit"]
-    assert fit["fraction"] == 1.0 and "контакты не учитываются" in fit["reason"]
+    # Alpha's contacts were never scanned: the contact criterion is unknown, so it does not count as met
+    assert fit["fraction"] == pytest.approx(0.8) and "нет данных: контакт: telegram" in fit["reason"]
+    # a Telegram contact found by hand satisfies it; the profile's lead is rescored right away
+    added = await client.post(
+        f"/api/channels/{world['alpha'].id}/contacts",
+        headers=auth,
+        json={"type": "telegram", "value": "@alpha_news"},
+    )
+    assert added.status_code == 201, added.text
+    page = _by_title(await _leads(client))
+    fit = {c["key"]: c for c in page["Alpha"]["score"]["components"]}["channel_fit"]
+    assert fit["fraction"] == 1.0 and "совпало 5 из 5" in fit["reason"]
     beta_fit = {c["key"]: c for c in page["Beta"]["score"]["components"]}["channel_fit"]
     assert beta_fit["fraction"] == 0.0 and page["Beta"]["score"]["ideal_lead_profile_id"] == created["id"]
 

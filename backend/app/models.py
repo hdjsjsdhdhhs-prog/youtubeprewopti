@@ -4,6 +4,7 @@ from app.core.db import Base
 from app.domains.ai.models import AICall, AIModel, Budget, PromptTemplate
 from app.domains.analysis.models import ChannelAnalysis, ScoringProfile, ThumbnailAnalysis
 from app.domains.approvals.models import Approval
+from app.domains.contacts.models import ChannelContactScan, Contact, ContactState, SuppressionEntry
 from app.domains.discovery.models import YouTubeQuotaLedger
 from app.domains.favorites.models import Favorite
 from app.domains.feedback.models import FeedbackEvent, ScoreOverride
@@ -38,6 +39,7 @@ from app.domains.youtube.models import (
 
 __all__ = [
     "AICall", "AIModel", "Approval", "AuditLog", "Base", "Budget", "Channel", "ChannelAnalysis",
+    "ChannelContactScan", "Contact", "ContactState", "SuppressionEntry",
     "ChannelDiscovery", "ChannelMetrics",
     "ChannelStatsSnapshot", "Favorite", "FeedbackEvent", "GeneratedThumbnail", "GenerationRequest",
     "IdealLeadProfile", "IdempotencyKey", "ImageAsset", "StyleReference",

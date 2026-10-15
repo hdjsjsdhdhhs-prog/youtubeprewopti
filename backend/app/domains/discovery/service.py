@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import AppError, ConflictError, IntegrationError, IntegrationErrorCode, NotFoundError
+from app.domains.contacts import service as contacts
 from app.domains.discovery.metrics import WINDOW, VideoPoint, compute_metrics
 from app.domains.discovery.quota import QuotaGuard, QuotaUsage, get_usage
 from app.domains.identity.service import audit
@@ -195,6 +196,7 @@ class QueryOutcome:
     channels_fetched: int = 0
     channels_fresh_skipped: int = 0
     videos_upserted: int = 0
+    contacts_new: int = 0  # public contacts found in the (re)fetched channels' texts (Phase 6)
     found_channel_ids: set[int] = field(default_factory=set)
 
 
@@ -415,6 +417,13 @@ async def _ingest(
     out.videos_upserted = await _upsert_videos(db, video_infos, channel_pks, now)
     await refresh_metrics(db, new_pks.values(), now)
 
+    # contacts (Phase 6): public contacts in the texts of the (re)fetched channels and of channels that got
+    # videos now; unchanged texts are skipped by the scan itself
+    touched = set(new_pks.values()) | {
+        channel_pks[v.youtube_channel_id] for v in video_infos if v.youtube_channel_id in channel_pks
+    }
+    out.contacts_new = (await contacts.scan_channels(db, touched, now)).contacts_new
+
     # 4. membership + provenance
     found = channel_pks
     out.channels_found = len(found)
@@ -464,7 +473,7 @@ JOB_STOPPING_CODES = frozenset({
 MAX_REPORTED_FAILURES = 50
 _TOTAL_KEYS = (
     "hits", "channels_new", "channels_new_in_project", "channels_fetched", "channels_fresh_skipped",
-    "videos_upserted",
+    "videos_upserted", "contacts_new",
 )
 
 

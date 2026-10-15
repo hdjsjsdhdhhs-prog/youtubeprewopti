@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 from app.core.state_machine import LeadStatus
 from app.domains.analysis.audit import Level
 from app.domains.analysis.models import ScoringKind
+from app.domains.contacts.models import ContactType
 from app.domains.feedback.schemas import ScoreOverrideOut
 from app.domains.leads.models import TagSource
 from app.domains.leads.results import RescoreResult
@@ -156,7 +157,9 @@ class LeadScoreOut(BaseModel):
     lead_profile_version: int
     priority_profile_version: int
     thumbnail_profile_version: int
+    contactability_profile_version: int
     ideal_lead_profile_id: int | None
+    contactability_score: Decimal | None  # ТЗ §19, 0–100; None = contacts never scanned
     components: list[ScoreComponentOut]
     created_at: datetime  # computed at
 
@@ -247,6 +250,8 @@ class LeadFilters(BaseModel):
     niche: list[int] = Field(default_factory=list, max_length=50)
     tag: list[int] = Field(default_factory=list, max_length=50)
     favorite: bool | None = None  # true = only favorites, false = only non-favorites
+    contact_type: list[ContactType] = Field(default_factory=list, max_length=6)  # a usable contact of any
+    min_contactability: Decimal | None = Field(default=None, ge=0, le=100)  # ТЗ §19 Contactability Score
 
 
 class LeadSummary(BaseModel):

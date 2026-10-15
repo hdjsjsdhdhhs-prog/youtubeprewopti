@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
+import { ChannelContactsCard } from "@/components/channel-contacts";
 import { EmptyState, ErrorState, InlineError, LoadingState } from "@/components/states";
 import { DemoBadge } from "@/components/status-badges";
 import { Badge, Button, Card, PageHeader, Pager } from "@/components/ui";
@@ -70,6 +71,7 @@ function ChannelView({ id }: { id: number }) {
       <Stats channel={c} />
       <Performance channel={c} />
       <ChannelLead channelId={c.id} />
+      <ChannelContactsCard channelId={c.id} />
       <ChannelGeneration channelId={c.id} />
       <ChannelVisualAudit channelId={c.id} />
       {c.description ? <p className="mt-3 max-w-3xl whitespace-pre-line text-sm text-zinc-600 dark:text-zinc-400">{c.description}</p> : null}

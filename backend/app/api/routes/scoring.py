@@ -7,6 +7,9 @@ from fastapi import APIRouter, Depends
 from app.api.deps import DbSession, Permission, ReadAuth, require
 from app.domains.analysis import scoring
 from app.domains.analysis.schemas import ScoringProfileOut, ThumbnailWeights
+from app.domains.contacts import service as contacts
+from app.domains.contacts.schemas import ContactabilityProfileOut, ContactabilityProfileSaved
+from app.domains.contacts.scoring import ContactabilityWeights
 from app.domains.identity.service import AuthContext
 from app.domains.leads import service as leads
 from app.domains.leads.schemas import (
@@ -59,3 +62,17 @@ async def get_priority_profile(ctx: ReadAuth, db: DbSession) -> PriorityProfileO
 @router.put("/priority", response_model=PriorityProfileSaved)
 async def set_priority_profile(body: PriorityWeights, ctx: AdminAuth, db: DbSession) -> PriorityProfileSaved:
     return await leads.set_priority_weights(db, ctx.workspace.id, ctx.user.id, body)
+
+
+@router.get("/contactability", response_model=ContactabilityProfileOut)
+async def get_contactability_profile(ctx: ReadAuth, db: DbSession) -> ContactabilityProfileOut:
+    """Contactability Score (§19): points per available contact type, capped at 100 (version 0 = defaults)."""
+    return contacts.contact_profile_out(await contacts.active_contact_weights(db, ctx.workspace.id))
+
+
+@router.put("/contactability", response_model=ContactabilityProfileSaved)
+async def set_contactability_profile(
+    body: ContactabilityWeights, ctx: AdminAuth, db: DbSession
+) -> ContactabilityProfileSaved:
+    """Save as the next version and rescore all leads of the workspace."""
+    return await contacts.set_contact_weights(db, ctx.workspace.id, ctx.user.id, body)

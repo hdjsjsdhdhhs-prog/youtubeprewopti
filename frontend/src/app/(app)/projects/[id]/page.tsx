@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 
 import { AnalysisResults } from "./analysis-results";
 import { ChannelAudit } from "./channel-analysis";
+import { ContactsScan } from "./contacts-scan";
 import { AnalysisPrefilter, ThumbnailIngestion } from "./thumbnail-analysis";
 
 export default function ProjectDetailPage() {
@@ -78,6 +79,7 @@ function ProjectDetail({ id }: { id: number }) {
         <ProjectNiches projectId={id} disabled={p.status === "archived"} />
       </div>
       <div className="mt-4 space-y-4">
+        <ContactsScan project={p} />
         <ThumbnailIngestion project={p} />
         <AnalysisPrefilter project={p} />
         <AnalysisResults project={p} />

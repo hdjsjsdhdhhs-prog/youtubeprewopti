@@ -11,6 +11,7 @@ from fastapi import APIRouter, Query, status
 from app.api.deps import DbSession, Paging, ReadAuth, WriteAuth
 from app.core.state_machine import LeadStatus
 from app.domains.analysis.audit import Level
+from app.domains.contacts.models import ContactType
 from app.domains.leads import service, workflow
 from app.domains.leads.schemas import (
     IdealLeadProfileIn,
@@ -62,14 +63,17 @@ async def list_leads(
     niche: Annotated[list[int] | None, Query(max_length=50)] = None,
     tag: Annotated[list[int] | None, Query(max_length=50)] = None,
     favorite: bool | None = None,
+    contact_type: Annotated[list[ContactType] | None, Query(max_length=6)] = None,
+    min_contactability: Pct = None,
     sort: LeadSort = LeadSort.LEAD_SCORE,
     order: SortOrder = SortOrder.DESC,
 ) -> LeadList:
     """Leads of the workspace; all filters are optional and AND-ed (§9). ``activity`` = at least this level
     (high: last video ≤ 14 days and ≥ 4 videos in 30 days; medium: last video ≤ 30 days). ``tag`` = any of
     these tags; ``favorite`` = the channel is (``true``) / is not (``false``) a favorite of the current
-    user. Lead Score / Priority sort and filter by the human value where one is set (§47). Default order:
-    highest Lead Score first."""
+    user. Lead Score / Priority sort and filter by the human value where one is set (§47). ``contact_type``
+    = the channel has a usable contact of any of these types (Phase 6); ``min_contactability`` and
+    ``sort=contactability`` use the Contactability Score (§19). Default order: highest Lead Score first."""
     filters = LeadFilters(
         project_id=project_id,
         channel_id=channel_id,
@@ -89,6 +93,8 @@ async def list_leads(
         niche=niche or [],
         tag=tag or [],
         favorite=favorite,
+        contact_type=contact_type or [],
+        min_contactability=min_contactability,
     )
     return await service.list_leads(
         db, ctx.workspace.id, ctx.user.id, filters, sort=sort, order=order, limit=page.limit,

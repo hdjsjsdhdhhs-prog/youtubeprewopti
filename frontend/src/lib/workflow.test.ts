@@ -70,6 +70,14 @@ describe("selection (ТЗ §11)", () => {
     expect(leadQueryFromParams(new URLSearchParams("favorite=maybe")).favorite).toBeUndefined();
     expect(leadQueryFromParams(new URLSearchParams("favorite=false")).favorite).toBe(false);
   });
+
+  it("«all filtered» carries the contact filters too (it must act on exactly the filtered leads)", () => {
+    const q = leadQueryFromParams(new URLSearchParams("contact_type=vk,email&min_contactability=30&sort=contactability"));
+    expect(selectionBody({ mode: "all", excluded: new Set() }, q)).toEqual({
+      filters: expect.objectContaining({ contact_type: ["vk", "email"], min_contactability: 30 }),
+      exclude_ids: [],
+    });
+  });
 });
 
 describe("human scores and tags", () => {
