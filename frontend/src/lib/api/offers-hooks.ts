@@ -31,7 +31,7 @@ const MESSAGE_POLL_MS = 5000;
 export const offerKeys = {
   all: ["offers"] as const,
   lead: (leadId: number) => ["offers", "lead", leadId] as const,
-  queue: (p: { status: OfferStatus; offset: number }) => ["offers", "queue", p] as const,
+  queue: (p: { status: OfferStatus; offset: number; campaignId?: number }) => ["offers", "queue", p] as const,
   templates: ["offer-templates"] as const,
 };
 
@@ -52,22 +52,29 @@ export function useLeadOffers(leadId: number) {
   });
 }
 
-/** The Approval Queue (ТЗ §22); polls while a shown offer is being drafted or sent. */
-export function useApprovalQueue(status: OfferStatus, offset: number) {
+/** The Approval Queue (ТЗ §22); polls while a shown offer is being drafted or sent. `campaignId` — only the offers
+ * of that campaign (Phase 8.2). */
+export function useApprovalQueue(status: OfferStatus, offset: number, campaignId?: number) {
   return useQuery({
-    queryKey: offerKeys.queue({ status, offset }),
+    queryKey: offerKeys.queue({ status, offset, campaignId }),
     queryFn: () =>
-      unwrap(api.GET("/api/approval-queue", { params: { query: { status, limit: QUEUE_PAGE, offset } } })),
+      unwrap(
+        api.GET("/api/approval-queue", {
+          params: { query: { status, limit: QUEUE_PAGE, offset, campaign_id: campaignId } },
+        }),
+      ),
     refetchInterval: (query) => pollInterval(query.state.data?.items.map((c) => c.offer)),
   });
 }
 
-/** Any offer change can move it between queue tabs and change the lead status (lists, cards). */
+/** Any offer change can move it between queue tabs and change the lead status (lists, cards) and the stage of its
+ * campaign lead (Phase 8.2). */
 export function invalidateOffers(qc: QueryClient) {
   return Promise.all([
     qc.invalidateQueries({ queryKey: offerKeys.all }),
     qc.invalidateQueries({ queryKey: qk.leads }),
     qc.invalidateQueries({ queryKey: qk.jobs }),
+    qc.invalidateQueries({ queryKey: ["campaigns"] }),
   ]);
 }
 

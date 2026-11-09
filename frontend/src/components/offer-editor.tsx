@@ -107,6 +107,17 @@ export function OfferEditor({
         <Badge tone={OFFER_STATUS_TONES[offer.status]}>{OFFER_STATUS_LABELS[offer.status]}</Badge>
         {offer.round > 1 ? <Badge>раунд {offer.round}</Badge> : null}
         {offer.manually_edited ? <Badge tone="violet">изменён вручную</Badge> : null}
+        {offer.campaign ? (
+          <Link
+            href={`/campaigns/${offer.campaign.id}`}
+            title={`A/B-вариант кампании: ${STYLE_LABELS[offer.campaign.style]}${offer.campaign.active ? "" : " (лид уже не в работе в кампании)"}`}
+            className="hover:underline"
+          >
+            <Badge tone="violet">
+              кампания «{offer.campaign.name}» · {offer.campaign.label}
+            </Badge>
+          </Link>
+        ) : null}
         {offer.provider_is_mock ? (
           <Badge tone="amber" title="Черновики написаны mock-провайдером: это не настоящий текст модели">
             mock
@@ -264,9 +275,16 @@ export function OfferEditor({
               <X className="size-4" aria-hidden /> Отклонить
             </Button>
           </div>
-          <p className="text-xs text-zinc-500">
-            Подтверждение само ничего не отправляет: после него можно отправить сейчас или запланировать — уйдёт ровно подтверждённый текст.
-          </p>
+          {offer.campaign?.active && (offer.campaign.status === "running" || offer.campaign.status === "paused") ? (
+            <p className="text-xs text-violet-700 dark:text-violet-400">
+              Оффер в запущенной кампании «{offer.campaign.name}»: после подтверждения письмо само встанет в очередь и уйдёт
+              в окно отправки кампании, с её лимитами — ровно подтверждённый текст.
+            </p>
+          ) : (
+            <p className="text-xs text-zinc-500">
+              Подтверждение само ничего не отправляет: после него можно отправить сейчас или запланировать — уйдёт ровно подтверждённый текст.
+            </p>
+          )}
         </div>
       ) : null}
       {offer.status === "approved" || offer.status === "scheduled" ? (

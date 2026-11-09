@@ -13,6 +13,7 @@ from app.core.logging import get_logger
 from app.core.secrets import SecretStore
 from app.domains.analysis.channel_pipeline import run_channel_analysis
 from app.domains.analysis.pipeline import run_thumbnail_analysis
+from app.domains.campaigns.service import tick as campaign_tick
 from app.domains.contacts.service import run_contact_extraction
 from app.domains.discovery.quota import CommittingQuota
 from app.domains.discovery.service import run_discovery
@@ -243,7 +244,16 @@ async def outreach_send(ctx: JobRunContext) -> dict[str, Any]:
     pass_context=True,
 )
 async def dispatch_outreach(context: procrastinate.JobContext, timestamp: int) -> None:
-    """Every minute: due queued emails → ``outreach_send`` jobs (one per account, cooldown, daily limit)."""
+    """Every minute: running campaigns queue their approved offers (Phase 8.2), then due queued emails →
+    ``outreach_send`` jobs (one per account, cooldown, daily limit, campaign pause / window / limit)."""
+    try:
+        async with get_sessionmaker()() as db:
+            ticked = await campaign_tick(db)
+            await db.commit()
+        if ticked["queued"] or ticked["completed"]:
+            log.info("campaigns.ticked", **ticked)
+    except Exception:  # a campaign problem must not stop the sending of already queued messages
+        log.exception("campaigns.tick_failed")
     async with get_sessionmaker()() as db:
         counts = await dispatch_due(db)
         await db.commit()

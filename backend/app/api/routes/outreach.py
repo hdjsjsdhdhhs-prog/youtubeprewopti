@@ -100,9 +100,16 @@ async def list_messages(
     page: Paging,
     status_: Annotated[MessageStatus | None, Query(alias="status")] = None,
     lead_id: int | None = None,
+    campaign_id: int | None = None,
 ) -> MessageList:
     return await service.list_messages(
-        db, ctx.workspace.id, status=status_, lead_id=lead_id, limit=min(page.limit, 200), offset=page.offset
+        db,
+        ctx.workspace.id,
+        status=status_,
+        lead_id=lead_id,
+        limit=min(page.limit, 200),
+        offset=page.offset,
+        campaign_id=campaign_id,
     )
 
 

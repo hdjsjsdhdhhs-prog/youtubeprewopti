@@ -19,12 +19,13 @@ export type MessageEvent = Schemas["MessageEventOut"];
 export type MessageList = Schemas["MessageList"];
 
 export const MESSAGES_PAGE = 50;
+export type MessageQuery = { status?: MessageStatus; lead_id?: number; campaign_id?: number; offset: number };
 const MESSAGES_POLL_MS = 5000;
 
 export const outreachKeys = {
   accounts: ["email-accounts"] as const,
   messages: ["messages"] as const,
-  messageList: (p: { status?: MessageStatus; lead_id?: number; offset: number }) => ["messages", "list", p] as const,
+  messageList: (p: MessageQuery) => ["messages", "list", p] as const,
 };
 
 /** A message change moves the offer / lead (scheduled → sent, replied …) and the account counters. */
@@ -86,7 +87,7 @@ export function useSetEmailAccountPaused() {
 // --- messages ------------------------------------------------------------------------------------
 
 /** Messages of the workspace (newest first); polls while a shown message can still change by itself. */
-export function useMessages(p: { status?: MessageStatus; lead_id?: number; offset: number }) {
+export function useMessages(p: MessageQuery) {
   return useQuery({
     queryKey: outreachKeys.messageList(p),
     queryFn: () => unwrap(api.GET("/api/messages", { params: { query: { ...p, limit: MESSAGES_PAGE } } })),

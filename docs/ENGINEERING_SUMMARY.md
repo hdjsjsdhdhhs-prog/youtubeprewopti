@@ -1,8 +1,9 @@
 # ENGINEERING SUMMARY
 
-_Обновлено: 2026-10-15 — Phase 1, 2, 3.1–3.7 и Phase 4 закоммичены (`05191bf`), Phase 5 (генерация превью,
-`66efe43`) и Phase 6 (контакты и Contactability Score, `1edd028`) закоммичены и запушены, Phase 7 (офферы и Approval
-Queue) реализована; всё проверено на mock, backend-тесты с PostgreSQL проходят (см. ниже).
+_Обновлено: 2026-11-08 — Phase 1, 2, 3.1–3.7 и Phase 4 закоммичены (`05191bf`), Phase 5 (генерация превью,
+`66efe43`), Phase 6 (контакты и Contactability Score, `1edd028`), Phase 7 (офферы и Approval Queue, `b3f65ad`) и
+Phase 8.1 (email-рассылка, `b601002`) закоммичены, Phase 8.2 (кампании и A/B по стилю оффера) реализована; всё
+проверено на mock, backend-тесты с PostgreSQL проходят (см. ниже).
 Архитектурное исследование — 2026-09-24._
 
 **PROJECT:**
@@ -494,6 +495,64 @@ vibecode для `thumbnail_analysis/v1` — **не проверены** (раз�
   отрисовка UI в браузере (Playwright не установлен), CI.
 - **Не сделано (осознанно):** чтение ответов / bounce из ящика (IMAP) и webhook API-провайдеров (Q-006), кампании и
   A/B (Phase 8–9), автоматическая отправка в Telegram / VK (Q-001).
+
+**PHASE 8.2 — КАМПАНИИ И A/B ПО СТИЛЮ ОФФЕРА (2026-11-08):** ТЗ §27–29, §35, §59; ADR-0010, ADR-0011; миграция
+`cda24619e4e7`. Кампания ничего не подтверждает сама: каждый её оффер по-прежнему проходит Approve в очереди
+подтверждения; запуск кампании — согласие отправить то, что человек подтвердит.
+- **Кампания** (`campaigns/service.py`): шаблон / инструкции / язык офферов, A/B-стили (1–3 из professional / short /
+  free_sample), разрешённые каналы в порядке предпочтения, отправители (`campaign_email_accounts`; пусто — любой
+  активный), окно отправки (дни ISO, часы, часовой пояс IANA, `starts_at`), свой дневной лимит (локальные сутки
+  кампании, = 20), автопауза после `max_consecutive_failures` (= 3) окончательных неудач подряд. `issues`
+  (`no_leads`, `email_account_required`) показывают, чего не хватает для запуска.
+- **Статусы** (`CAMPAIGN_MACHINE`): `draft ⇄ ready` → `pending_approval` (запущено написание офферов) → `running` ⇄
+  `paused` → `completed` → `archived`; без лидов в работе запущенная кампания завершается сама. Завершение и архив
+  отменяют письма в очереди (офферы остаются подтверждёнными) и освобождают лидов. Все действия — в `audit_logs`.
+- **Лиды** (`campaign_leads`): «В кампанию» — выбранные или «все отфильтрованные» (`LeadSelection`, как у массовых
+  действий); лид в работе не более чем в одной кампании (частичный UNIQUE); закрытые и уже получившие письмо
+  пропускаются (счётчики причин в ответе); A/B-стиль лида — тот, у которого меньше лидов (при равенстве — случайно);
+  открытый оффер лида сохраняется. Этап лида (`stage`) выводится из оффера и сообщения: no_offer → drafting → review →
+  approved → queued → sent / replied / failed / rejected …
+- **Офферы:** оценка (`/offers/estimate`, ничего не генерирует; стоимость, бюджеты, `confirm_token`) → запуск —
+  по одному черновику на лид в его стиле, задачи `offer_generation` в очереди `bulk` (пакет ≤ 200), цена — жёсткий
+  лимит; контакт — первый пригодный по каналам кампании в их порядке.
+- **Отправка:** `tick` кампаний в начале периодической `dispatch_outreach` ставит сообщение подтверждённого оффера
+  запущенной кампании в очередь на ближайший момент окна с наименее загруженного её аккаунта (один раз на approval —
+  отменённое / неудачное автоматически не повторяется). Диспетчер и `outreach_send` дополнительно соблюдают паузу,
+  окно и дневной лимит кампании (`campaigns/rules.py`, чистые функции); лимиты почтового аккаунта действуют как
+  прежде. `messages.campaign_id`; исходы (отправлено / отклонено / не отправлено / лид закрыт) синхронизируются из
+  офферов; успешная отправка сбрасывает счётчик неудач.
+- **A/B:** `GET /api/campaigns/{id}/stats` — только счётчики по стилям (отправлено, доставлено, ответы,
+  положительные / отрицательные, недоставки, opt-out, reply rate), `min_sample` = 30 и `small_sample`, без выводов и
+  без автоматического выбора победителя.
+- **API:** `GET/POST /api/campaigns`, `GET/PATCH /api/campaigns/{id}`, `GET/POST /{id}/leads`, `DELETE
+  /{id}/leads/{lead_id}`, `POST /{id}/offers/estimate`, `POST /{id}/offers`, `POST /{id}/start|pause|resume|complete|archive`,
+  `GET /{id}/stats`; запуск и возобновление — право `outreach_send`; `GET /api/approval-queue` и `GET /api/messages`
+  принимают `campaign_id`; `OfferOut.campaign`, `MessageOut.campaign_id` / `campaign_name`; результат диспетчера —
+  ключ `campaign_waiting`.
+- **Frontend:** страница «Кампании» (`g k`: список по статусам, форма создания / правки — `campaign-form.tsx`) и
+  карточка кампании (`/campaigns/[id]`: настройки, проблемы запуска, кнопки статусов, лиды с этапами, оценка и запуск
+  написания офферов, A/B-счётчики, ссылки в очередь подтверждения и рассылку с фильтром). В «Лидах» — «В кампанию…» в
+  панели массовых действий (с итогом: добавлено / пропущено по причинам). В очереди подтверждения и рассылке — фильтр
+  `?campaign_id=` (`components/campaign-filter.tsx`); в редакторе оффера — бейдж кампании и A/B-варианта и подсказка,
+  что подтверждённое письмо запущенной кампании уйдёт само в её окно; в панели сообщения — ссылка на кампанию. Хуки
+  `lib/api/campaigns-hooks.ts`, логика `lib/campaigns.ts`; `schema.d.ts` перегенерирован из `app.openapi()`.
+- **Отклонения от DATABASE.md:** нет `ab_tests` / `ab_test_variants` (A/B — по стилю оффера), окно и лимиты —
+  колонки вместо `schedule` / `limits` JSONB, `campaign_leads.style` вместо `assigned_variant_label`, связь оффера с
+  кампанией — через `campaign_leads.offer_id` (в `offers` нет `campaign_id`).
+- Проверки (2026-11-08): backend `pytest` **452 passed / 1 skipped** (+18: API кампаний, правила окна / лимита /
+  паузы — `test_campaigns_api.py`, `test_campaign_rules.py`), `ruff check .`, `mypy app` (163 файла), `alembic
+  current` = head `cda24619e4e7` и `alembic check` на `ytlead` — без расхождений, роль `ytlead_app` — SELECT /
+  INSERT / UPDATE / DELETE на `campaigns`, `campaign_email_accounts`, `campaign_leads`; frontend `npm run typecheck`,
+  `npm run lint` (0 ошибок, прежнее предупреждение `useVirtualizer`), `npm test` — 154 (+14), `next build` (21
+  маршрут). Запуск `scripts/dev.ps1` (uvicorn + воркер + `next dev`): `/api/health` — ok, все 12 путей кампаний в
+  живом OpenAPI, `/api/campaigns` без входа — 401, страницы `/campaigns`, `/campaigns/1`,
+  `/approvals?campaign_id=1`, `/outreach?campaign_id=1`, `/leads` — 200. pytest на Windows запускать с
+  `--basetemp` внутри проекта: очистка `C:\Temp\pytest-of-<user>` падает с `PermissionError` после прогона.
+- **Не проверено:** сквозной сценарий в браузере под входом (создать кампанию → лиды → офферы → Approve → отправка
+  в окно) — Playwright не установлен; срабатывание `tick` по живым часам в реальном воркере (покрыто тестами
+  диспетчера); отправка через внешний SMTP; CI.
+- **Не сделано (осознанно):** выводы / победитель A/B и измерения subject / body / cta / attachment (Phase 9),
+  автоматические повторы неудачных писем кампании, чтение ответов из ящика (Q-006), Telegram / VK автоматически (Q-001).
 
 **VERIFICATION STATUS (этап архитектуры):**
 - Verified: версии пакетов (PyPI/npm), Procrastinate на Windows + PG16 (spike), квоты YouTube (официальная документация), модели gpt-image-2.5-flare/sunburst и линейка GPT-6 (документация OpenAI).

@@ -26,6 +26,7 @@ from app.core.errors import ConflictError, NotFoundError
 from app.core.state_machine import LEAD_MACHINE, LeadStatus
 from app.domains.approvals import service as approvals
 from app.domains.approvals.models import ApprovalTarget
+from app.domains.campaigns.models import Campaign, CampaignLead, CampaignLeadStatus
 from app.domains.contacts.models import SuppressionReason
 from app.domains.contacts.service import channel_contacts, suppress_after_message
 from app.domains.generation.models import GeneratedThumbnail
@@ -119,6 +120,16 @@ async def messages_out(db: AsyncSession, rows: list[Message]) -> list[MessageOut
             )
         )
     }
+    campaigns = {
+        c_id: name
+        for c_id, name in (
+            await db.execute(
+                select(Campaign.id, Campaign.name).where(
+                    Campaign.id.in_([m.campaign_id for m in rows if m.campaign_id])
+                )
+            )
+        ).tuples()
+    }
     out = []
     for m in rows:
         cid, title = channels.get(m.lead_id, (0, ""))
@@ -148,6 +159,8 @@ async def messages_out(db: AsyncSession, rows: list[Message]) -> list[MessageOut
                 error_code=m.error_code,
                 error_message=m.error_message,
                 events=events.get(m.id, []),
+                campaign_id=m.campaign_id,
+                campaign_name=campaigns.get(m.campaign_id) if m.campaign_id else None,
                 created_at=m.created_at,
             )
         )
@@ -196,8 +209,13 @@ async def list_messages(
     lead_id: int | None,
     limit: int,
     offset: int,
+    campaign_id: int | None = None,
 ) -> MessageList:
     conds: list[ColumnElement[bool]] = [Message.workspace_id == workspace_id]
+    scope: list[ColumnElement[bool]] = [Message.workspace_id == workspace_id]
+    if campaign_id is not None:
+        conds.append(Message.campaign_id == campaign_id)
+        scope.append(Message.campaign_id == campaign_id)
     if status is not None:
         conds.append(Message.status == status)
     if lead_id is not None:
@@ -215,9 +233,7 @@ async def list_messages(
     counts = {s.value: 0 for s in MessageStatus}
     for s, n in (
         await db.execute(
-            select(Message.status, func.count())
-            .where(Message.workspace_id == workspace_id)
-            .group_by(Message.status)
+            select(Message.status, func.count()).where(*scope).group_by(Message.status)
         )
     ).tuples():
         counts[s.value] = int(n)
@@ -318,6 +334,12 @@ async def queue_message(
         else None
     )
     key = idempotency_key(variant.id, contact.id, channel)
+    # Phase 8.2: a message of an offer in a campaign obeys the campaign's pause, window and daily limit
+    campaign_id = await db.scalar(
+        select(CampaignLead.campaign_id).where(
+            CampaignLead.offer_id == offer.id, CampaignLead.status == CampaignLeadStatus.ACTIVE
+        )
+    )
     message_id = await db.scalar(
         insert(Message)
         .values(
@@ -338,6 +360,7 @@ async def queue_message(
             idempotency_key=key,
             status=MessageStatus.QUEUED if channel == OutreachChannel.EMAIL else MessageStatus.MANUAL,
             scheduled_at=when,
+            campaign_id=campaign_id,
             created_by=actor_id,
         )
         .on_conflict_do_nothing(index_elements=["idempotency_key"], index_where=text(LIVE_WHERE))
@@ -370,6 +393,7 @@ async def queue_message(
             "scheduled_at": when.isoformat(),
             "content_hash": st.content_hash,
             "approval_id": approval.id,
+            "campaign_id": campaign_id,
         },
     )
     return message
@@ -392,6 +416,11 @@ async def _offer_and_lead(db: AsyncSession, workspace_id: int, offer_id: int) ->
     if row is None:
         raise NotFoundError("Offer not found")
     return row
+
+
+async def lock_offer_and_lead(db: AsyncSession, workspace_id: int, offer_id: int) -> tuple[Offer, Lead]:
+    """Offer + lead row locks, in the order every writer uses (campaign → offer + lead → message)."""
+    return await _offer_and_lead(db, workspace_id, offer_id)
 
 
 async def send_now(

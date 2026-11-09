@@ -169,6 +169,8 @@ class MessageOut(BaseModel):
     error_code: str | None
     error_message: str | None
     events: list[MessageEventOut]
+    campaign_id: int | None = None  # Phase 8.2: its pause / window / daily limit apply
+    campaign_name: str | None = None
     created_at: datetime
 
 

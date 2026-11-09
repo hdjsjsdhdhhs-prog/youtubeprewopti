@@ -9,6 +9,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstrai
 from app.core.state_machine import LeadStatus
 from app.domains.analysis.schemas import BudgetCheckOut
 from app.domains.approvals.models import ApprovalDecision
+from app.domains.campaigns.models import CampaignStatus
 from app.domains.contacts.schemas import ContactOut
 from app.domains.jobs.schemas import JobRunOut
 from app.domains.offers.drafting import (
@@ -134,6 +135,17 @@ class ApprovalOut(BaseModel):
     created_at: datetime
 
 
+class OfferCampaignRef(BaseModel):
+    """The campaign the offer belongs to (Phase 8.2): its A/B style and whether it still runs there."""
+
+    id: int
+    name: str
+    status: CampaignStatus
+    style: OfferStyle
+    label: str
+    active: bool  # the lead is still in work in this campaign
+
+
 class OfferOut(BaseModel):
     id: int
     lead_id: int
@@ -165,6 +177,7 @@ class OfferOut(BaseModel):
     approval: ApprovalOut | None  # the latest decision
     email_account_id: int | None  # sender for the email channel (None = first active account)
     message: MessageOut | None  # the latest outgoing message of the offer (Phase 8)
+    campaign: OfferCampaignRef | None = None  # Phase 8.2
     variants: list[OfferVariantOut]  # newest round first, then by label
     created_at: datetime
     updated_at: datetime

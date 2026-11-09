@@ -1,6 +1,7 @@
 "use client";
 
 import { Ban, CheckCheck, Loader2, MessageSquarePlus } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { errorMessage } from "@/components/states";
@@ -57,6 +58,11 @@ export function MessagePanel({ message: m, cancellable = true }: { message: Mess
           <span className="text-zinc-500"> ({contactLabel(m.contact_type)})</span>
         </span>
         {m.email_account_name ? <span className="text-xs text-zinc-500">с аккаунта «{m.email_account_name}»</span> : null}
+        {m.campaign_id ? (
+          <Link href={`/campaigns/${m.campaign_id}`} className="text-xs text-violet-700 hover:underline dark:text-violet-400">
+            кампания «{m.campaign_name ?? m.campaign_id}»
+          </Link>
+        ) : null}
       </div>
       <p className="text-xs text-zinc-500">
         {m.sent_at

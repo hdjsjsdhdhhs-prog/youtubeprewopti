@@ -435,7 +435,7 @@ async def test_daily_limit_holds_the_queue(
     db.add(other)
     await db.flush()
     counts = await dispatch_due(db)
-    assert counts == {"accounts": 1, "enqueued": 0, "limit_reached": 1}
+    assert counts == {"accounts": 1, "enqueued": 0, "limit_reached": 1, "campaign_waiting": 0}
     account = await db.get(EmailAccount, acc["id"])
     assert account.next_send_at is None
 

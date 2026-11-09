@@ -89,9 +89,10 @@ async def approval_queue(
     page: Paging,
     status_: Annotated[QueueStatus, Query(alias="status")] = "pending_approval",
     project_id: int | None = None,
+    campaign_id: int | None = None,
 ) -> ApprovalQueue:
     """ТЗ §22 cards: creator / channel, thumbnail, AI analysis, Lead Score, generated preview, offer draft,
-    contact channels."""
+    contact channels. ``campaign_id`` — only that campaign's offers (Phase 8.2)."""
     return await service.approval_queue(
         db,
         ctx.workspace.id,
@@ -99,6 +100,7 @@ async def approval_queue(
         project_id=project_id,
         limit=min(page.limit, 100),
         offset=page.offset,
+        campaign_id=campaign_id,
     )
 
 

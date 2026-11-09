@@ -33,6 +33,8 @@ from app.core.secrets import SecretStore
 from app.core.state_machine import LEAD_MACHINE, LeadStatus
 from app.domains.approvals import service as approvals
 from app.domains.approvals.models import ApprovalTarget
+from app.domains.campaigns import rules as campaign_rules
+from app.domains.campaigns.models import Campaign
 from app.domains.contacts.models import SuppressionReason
 from app.domains.contacts.service import channel_contacts, suppress_after_message
 from app.domains.identity.service import audit
@@ -60,6 +62,9 @@ from app.providers.storage import StorageBackend
 Sessions = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
 
+DISPATCH_CANDIDATES = 25  # due messages looked at per account (campaign ones may have to wait)
+
+
 def _rng_seconds(lo: int, hi: int) -> int:
     return lo if hi <= lo else lo + pysecrets.randbelow(hi - lo + 1)
 
@@ -82,23 +87,48 @@ async def dispatch_due(db: AsyncSession, now: datetime | None = None) -> dict[st
         )
     )
     used = await sent_today(db, [a.id for a in accounts], now)
-    counts = {"accounts": len(accounts), "enqueued": 0, "limit_reached": 0}
+    counts = {"accounts": len(accounts), "enqueued": 0, "limit_reached": 0, "campaign_waiting": 0}
+    campaigns: dict[int, Campaign | None] = {}
+    campaign_used: dict[int, int] = {}
+
+    async def may_go(message: Message) -> bool:
+        """Phase 8.2: a campaign message waits while its campaign is paused, outside its window or over
+        its daily limit (counting what this pass has already enqueued)."""
+        cid = message.campaign_id
+        if cid is None:
+            return True
+        if cid not in campaigns:
+            campaign = await db.get(Campaign, cid)
+            campaigns[cid] = campaign
+            if campaign is not None:
+                campaign_used[cid] = (await campaign_rules.sent_today(db, [campaign], now))[cid]
+        campaign = campaigns[cid]
+        return campaign is None or campaign_rules.blocked_reason(campaign, now, campaign_used[cid]) is None
+
     for account in accounts:
         if used.get(account.id, 0) >= account.daily_limit:
             counts["limit_reached"] += 1
             continue
-        message = await db.scalar(
-            select(Message)
-            .where(
-                Message.email_account_id == account.id,
-                Message.status == MessageStatus.QUEUED,
-                Message.scheduled_at <= now,
-                or_(Message.next_attempt_at.is_(None), Message.next_attempt_at <= now),
+        candidates = list(
+            await db.scalars(
+                select(Message)
+                .where(
+                    Message.email_account_id == account.id,
+                    Message.status == MessageStatus.QUEUED,
+                    Message.scheduled_at <= now,
+                    or_(Message.next_attempt_at.is_(None), Message.next_attempt_at <= now),
+                )
+                .order_by(Message.scheduled_at, Message.id)
+                .limit(DISPATCH_CANDIDATES)
+                .with_for_update(skip_locked=True)
             )
-            .order_by(Message.scheduled_at, Message.id)
-            .limit(1)
-            .with_for_update(skip_locked=True)
         )
+        message: Message | None = None
+        for candidate in candidates:
+            if await may_go(candidate):
+                message = candidate
+                break
+            counts["campaign_waiting"] += 1
         if message is None:
             continue
         enq = await enqueue_job(
@@ -115,6 +145,8 @@ async def dispatch_due(db: AsyncSession, now: datetime | None = None) -> dict[st
                 seconds=_rng_seconds(account.cooldown_min_seconds, account.cooldown_max_seconds)
             )
             counts["enqueued"] += 1
+            if message.campaign_id is not None and message.campaign_id in campaign_used:
+                campaign_used[message.campaign_id] += 1
     return counts
 
 
@@ -240,6 +272,14 @@ async def _prepare(
             "Дневной лимит аккаунта исчерпан: письмо уйдёт завтра.",
         )
         return {"waiting": "daily_limit"}
+    if message.campaign_id is not None:
+        campaign = await db.get(Campaign, message.campaign_id, populate_existing=True)
+        if campaign is not None:
+            used = (await campaign_rules.sent_today(db, [campaign], now))[campaign.id]
+            wait = campaign_rules.blocked_reason(campaign, now, used)
+            if wait is not None:  # paused / outside the window / over the limit since dispatch
+                message.error_code, message.error_message = wait, campaign_rules.WAIT_MESSAGES[wait]
+                return {"waiting": wait}
 
     attachments: tuple[Attachment, ...] = ()
     if message.attachment_asset_id is not None:
@@ -366,6 +406,8 @@ async def send_message(
                         error.human_message,
                     )
                 result = {"failed": message.id, "error": error.code.value, "bounce": bounce}
+        final = error is None or message.status == MessageStatus.FAILED
+        campaign_id = message.campaign_id if final else None
         await audit(
             db,
             "message.sent" if error is None else "message.send_failed",
@@ -381,4 +423,33 @@ async def send_message(
             },
         )
         await db.commit()
+    if campaign_id is not None:  # own transaction: never wait for the campaign while holding the offer
+        async with sessions() as db:
+            paused = await _campaign_result(db, campaign_id, message_id, ok=error is None)
+            await db.commit()
+        if paused:
+            result["campaign_autopaused"] = campaign_id
     return result
+
+
+async def _campaign_result(db: AsyncSession, campaign_id: int, message_id: int, *, ok: bool) -> bool:
+    """Phase 8.2: a success resets the campaign's failure streak; a final failure (bounce included) extends
+    it and may pause the campaign (ТЗ §59). Returns True if it was paused now."""
+    campaign = await db.scalar(
+        select(Campaign)
+        .where(Campaign.id == campaign_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if campaign is None or not campaign_rules.after_send(campaign, ok):
+        return False
+    await audit(
+        db,
+        "campaign.autopaused",
+        workspace_id=campaign.workspace_id,
+        actor_user_id=None,
+        entity_type="campaign",
+        entity_id=campaign.id,
+        diff={"reason": campaign.paused_reason, "message_id": message_id},
+    )
+    return True

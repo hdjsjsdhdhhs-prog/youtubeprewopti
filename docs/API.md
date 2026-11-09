@@ -582,6 +582,58 @@ backoff до `YTL_OUTREACH_MAX_ATTEMPTS`), `→ failed`; `queued / manual → ca
 отказ входа — аккаунт `error`; `YTL_OUTREACH_AUTOPAUSE_FAILURES` ошибок подряд — аккаунт `paused`. Окончательная
 неудача оставляет оффер подтверждённым (можно отправить позже), лид — `failed`.
 
+### Кампании (Phase 8.2, ТЗ §27–29, §35, §59; ADR-0010, ADR-0011)
+
+Кампания ничего не подтверждает сама: каждый её оффер проходит очередь подтверждения по одному. Запуск кампании —
+согласие отправить то, что человек подтвердит; *запущенная* кампания (`tick` в начале периодической задачи
+`dispatch_outreach`, каждую минуту) ставит сообщение подтверждённого оффера в очередь на ближайший момент окна, с
+наименее загруженного своего аккаунта (один раз на approval; отменённое / неудачное автоматически не повторяется).
+Диспетчер и задача отправки дополнительно соблюдают паузу, окно и дневной лимит кампании (`campaigns/rules.py`);
+лимиты почтового аккаунта действуют как прежде. Чтение — viewer+, изменение — operator+ (`write`), запуск и
+возобновление — `outreach_send`.
+
+- `GET /api/campaigns?status&include_archived=false` → `CampaignList {items: CampaignOut[], counts (по статусам)}`.
+  `POST /api/campaigns` `CampaignIn {name, description = "", project_id?, template_id?, instructions = "", language?,
+  styles = [professional] (1–3, уникальные), channels = [email] (1–4, в порядке предпочтения), email_account_ids = []
+  (пусто — любой активный), send_days = [1..5] (ISO), send_from = 10:00, send_to = 18:00, timezone = Europe/Moscow
+  (IANA), starts_at?, daily_limit 1–500 = 20, max_consecutive_failures 1–50 = 3}` → 201. `GET /{id}`;
+  `PATCH /{id}` `CampaignPatch` — только переданные поля (до завершения), `email_account_ids` заменяет список,
+  `starts_at: null` снимает. 400 `invalid_window`, 409 `template_archived`, `campaign_status`.
+- `CampaignOut`: настройки, `email_accounts[]`, `sent_today` (локальные сутки кампании), `consecutive_failures`,
+  `paused_reason`, `in_window_now`, `next_window_at`, `issues[]` (`no_leads`, `email_account_required`; пусто — можно
+  запускать), `counts {leads, active, sent, failed, rejected, skipped, removed, stages (этап лидов в работе), replied,
+  opted_out}`, даты запуска / завершения / архива.
+- **Статусы** (`CAMPAIGN_MACHINE`): `draft ⇄ ready` (по `issues`) → `pending_approval` (запущено написание офферов) →
+  `running` ⇄ `paused` → `completed` → `archived`. Без лидов в работе запущенная кампания завершается сама.
+- `GET /{id}/leads?status&limit≤200&offset` → `CampaignLeadList`: `CampaignLeadOut {lead_id, channel_id,
+  channel_title, lead_status, style, label (A/B/C), status, stage (no_offer, drafting, generation_failed, review,
+  approved, queued, manual, send_cancelled, sent, replied, failed, rejected, skipped, removed), reason, offer_id,
+  offer_status, message_id, message_status, sent_at, added_at}`.
+- `POST /{id}/leads` `{selection: LeadSelection}` (как у массовых действий лидов: `lead_ids` или `filters` +
+  `exclude_ids`) → `CampaignLeadsResult {matched, added, skipped {already_in_campaign, other_campaign, lead_status},
+  styles}` — лид в работе не более чем в одной кампании; закрытые и уже получившие письмо пропускаются; A/B-стиль —
+  тот, у которого меньше лидов (при равенстве — случайно); открытый оффер лида сохраняется. `DELETE
+  /{id}/leads/{lead_id}` → `CampaignOut` — письмо в очереди отменяется, оффер остаётся подтверждённым; 409
+  `campaign_lead_status`, `message_sending`.
+- `POST /{id}/offers/estimate` → `CampaignGenerationEstimate {lead_ids, styles, skipped {no_contact, lead_status,
+  generation_running, offer_generating}, remaining (следующим запуском, пакет ≤ 200), provider, model_key,
+  cost_per_offer_usd, estimated_cost_usd, pricing_verified, budgets, within_budgets, confirm_token}` — ничего не
+  генерирует. `POST /{id}/offers` `{confirm_token}` → 202 `CampaignGenerationResult {campaign, started, job_ids}`:
+  один черновик на лид в его стиле, задача `offer_generation` (очередь `bulk`) с ценой как жёстким лимитом; контакт —
+  первый пригодный по каналам кампании в их порядке. 409 `confirmation_required` (оценка устарела),
+  `nothing_to_generate`; `ai_not_configured`.
+- `POST /{id}/start` (`outreach_send`) — 409 `campaign_not_ready` (`details.issues`); `POST /{id}/pause` — письма ждут
+  в очереди; `POST /{id}/resume` (`outreach_send`, при email нужен активный аккаунт); `POST /{id}/complete` и
+  `POST /{id}/archive` — письма в очереди отменяются (офферы остаются подтверждёнными), лиды в работе освобождаются.
+  Автопауза: `max_consecutive_failures` окончательных неудач подряд (включая недоставки) — `paused` с причиной;
+  успешная отправка сбрасывает счётчик. Все действия — в `audit_logs` (`campaign.*`).
+- `GET /{id}/stats` → `CampaignStats {variants: VariantStats[] {style, label, leads, approved, sent, delivered, opened,
+  replied, positive_reply, negative_reply, no_reply, bounced, opt_out, reply_rate, small_sample}, min_sample = 30,
+  note}` — только счётчики (стиль — по отправленному варианту), без выводов.
+- Связанные изменения: `GET /api/approval-queue?campaign_id`, `GET /api/messages?campaign_id`; `OfferOut.campaign`
+  (`OfferCampaignRef {id, name, status, style, label, active}`), `MessageOut.campaign_id` / `campaign_name`; результат
+  диспетчера — ключ `campaign_waiting`.
+
 ### AI: реестр моделей, расходы и бюджеты (Phase 3.3–3.4)
 
 `GET /api/ai/status` → `{"provider": "openai"|"mock"|null, "configured", "models": [AIModelOut]}`. Реестр

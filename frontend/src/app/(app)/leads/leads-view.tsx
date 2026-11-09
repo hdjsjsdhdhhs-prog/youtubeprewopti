@@ -10,8 +10,10 @@ import { EmptyState, ErrorState, InlineError, LoadingState } from "@/components/
 import { DemoBadge } from "@/components/status-badges";
 import { Badge, Button, Card, Input, PageHeader, Pager, Select } from "@/components/ui";
 import { LEVEL_LABELS, formatScore, opportunityTone, scoreTone } from "@/lib/analysis";
+import { useAddCampaignLeads, useCampaigns } from "@/lib/api/campaigns-hooks";
 import { LEADS_PAGE, useLeads, useProjects, useSyncLeads, useTaxonomy, type Lead } from "@/lib/api/hooks";
 import { useBulkLeads, useTags } from "@/lib/api/workflow-hooks";
+import { ADD_SKIP_LABELS, campaignErrorMessage, canAddLeads } from "@/lib/campaigns";
 import {
   CONTACT_TYPES,
   CONTACT_TYPE_LABELS,
@@ -201,6 +203,12 @@ function BulkBar({
   const tooMany = count > MAX_BULK_LEADS;
   const run = (action: Parameters<typeof bulk.mutate>[0]["action"]) =>
     bulk.mutate({ selection: selectionBody(selection, query), action });
+  // «В кампанию» (ТЗ §35): the same selection; the backend skips leads already active in a campaign
+  const campaigns = useCampaigns(false, count > 0);
+  const addToCampaign = useAddCampaignLeads();
+  const openCampaigns = (campaigns.data?.items ?? []).filter((c) => canAddLeads(c.status));
+  const added = addToCampaign.data;
+  const addedTo = addToCampaign.variables?.id;
 
   return (
     <div
@@ -289,7 +297,43 @@ function BulkBar({
           <Button size="sm" variant="ghost" disabled={bulk.isPending || tooMany} onClick={() => run({ type: "unfavorite" })}>
             ☆ Из избранного
           </Button>
+          <Select
+            aria-label="Добавить выбранные в кампанию"
+            value=""
+            disabled={addToCampaign.isPending || tooMany || openCampaigns.length === 0}
+            title={openCampaigns.length ? undefined : "Нет открытых кампаний — создайте её в разделе «Кампании»"}
+            onChange={(e) => {
+              const id = Number(e.target.value);
+              if (id) addToCampaign.mutate({ id, selection: selectionBody(selection, query) });
+            }}
+            className="h-7 w-48 py-0 text-xs"
+          >
+            <option value="">{openCampaigns.length ? "В кампанию…" : "Нет открытых кампаний"}</option>
+            {openCampaigns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
         </>
+      ) : null}
+      {added && addedTo ? (
+        <span role="status" className="text-xs text-zinc-600 dark:text-zinc-400">
+          В{" "}
+          <Link href={`/campaigns/${addedTo}`} className="underline">
+            кампанию
+          </Link>{" "}
+          добавлено: {added.added}
+          {Object.entries(added.skipped)
+            .filter(([, n]) => n > 0)
+            .map(([k, n]) => ` · ${ADD_SKIP_LABELS[k] ?? k}: ${n}`)
+            .join("")}
+        </span>
+      ) : null}
+      {addToCampaign.error ? (
+        <span role="alert" className="text-xs text-red-600">
+          {campaignErrorMessage(addToCampaign.error) ?? "Не удалось добавить в кампанию."}
+        </span>
       ) : null}
       {tooMany ? (
         <span className="text-xs text-red-600">Не больше {MAX_BULK_LEADS} лидов за раз — сузьте фильтры.</span>

@@ -46,6 +46,7 @@ Discovery → Enrichment → Filtering → Thumbnail Analysis → Lead Scoring �
 | Offer | `offer_generation` | interactive | text-premium | редактирование |
 | Approval | — | — | — | **Approve обязателен** |
 | Outreach | `outreach_send` (+ периодический `dispatch_outreach`, Phase 8.1) | outreach | — | send now / schedule, ручная отправка, события |
+| Campaigns | `tick` кампаний внутри `dispatch_outreach` (Phase 8.2); офферы — `offer_generation` в очереди bulk | outreach / bulk | text-premium | запуск / пауза / завершение; каждый оффер — Approve |
 | Tracking | `reply_polling`, `analytics_processing` | monitoring | классификация ответов | — |
 
 ## 3. Слои backend

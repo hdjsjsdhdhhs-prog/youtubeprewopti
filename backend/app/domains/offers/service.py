@@ -39,6 +39,7 @@ from app.domains.analysis.models import ChannelAnalysis, ThumbnailAnalysis
 from app.domains.analysis.service import budget_checks
 from app.domains.approvals import service as approvals
 from app.domains.approvals.models import Approval, ApprovalDecision, ApprovalTarget
+from app.domains.campaigns.models import Campaign, CampaignLead, CampaignLeadStatus
 from app.domains.contacts.models import ContactType
 from app.domains.contacts.schemas import ContactOut
 from app.domains.contacts.service import channel_contacts
@@ -63,11 +64,14 @@ from app.domains.offers.drafting import (
     PersonalizationSource,
 )
 from app.domains.offers.models import (
+    LABELS,
     OFFER_MACHINE,
     OPEN_STATUSES,
+    STYLES,
     Offer,
     OfferStatus,
     OfferStatusHistory,
+    OfferStyle,
     OfferVariant,
     OfferVariantStatus,
     OutreachChannel,
@@ -77,6 +81,7 @@ from app.domains.offers.schemas import (
     ApprovalQueue,
     Blocker,
     LeadOffers,
+    OfferCampaignRef,
     OfferDecisionIn,
     OfferEdit,
     OfferEstimate,
@@ -484,6 +489,17 @@ async def _latest_offer(db: AsyncSession, lead_id: int, *, lock: bool = False) -
     return await db.scalar(stmt)
 
 
+async def latest_offer(db: AsyncSession, lead_id: int, *, lock: bool = False) -> Offer | None:
+    """The lead's offer a new round would reuse (open, rejected or failed); None = a new offer."""
+    return await _latest_offer(db, lead_id, lock=lock)
+
+
+async def lead_and_channel(
+    db: AsyncSession, workspace_id: int, lead_id: int, *, lock: bool = False
+) -> tuple[Lead, Channel]:
+    return await _lead(db, workspace_id, lead_id, lock=lock)
+
+
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
 
@@ -612,14 +628,77 @@ async def start_offer(
         )
     budget.require_confirmation(body.confirm_token, plan.token_payload)
 
+    offer, contacts = await open_round(
+        db,
+        workspace_id,
+        actor_id,
+        lead,
+        channel,
+        existing,
+        gathered=plan.gathered,
+        instructions=body.instructions,
+        model=model,
+        prompt_template_id=plan.prompt_template_id,
+        styles=[drafting.style_for(i)[1] for i in range(body.variant_count)],
+        estimated_cost_usd=est.estimated_cost_usd,
+        queue=JobQueue.INTERACTIVE,
+        confirm_token=body.confirm_token,
+    )
+    out = await offer_out(db, workspace_id, offer, lead_status=lead.status, contacts=contacts)
+    return OfferStartResult(offer=out, lead_status=lead.status)
+
+
+def label_of(style: OfferStyle) -> str:
+    """A / B / C are bound to the style (professional / short / free sample), also in campaigns."""
+    return LABELS[STYLES.index(style)]
+
+
+def campaign_contact(
+    contacts: Sequence[ContactOut], channels: Sequence[OutreachChannel]
+) -> tuple[ContactOut, OutreachChannel] | None:
+    """The first usable contact fitting the campaign's channels, in their order of preference; ``manual``
+    takes any usable contact (the operator sends it himself). None = the lead cannot be reached here."""
+    usable = [c for c in contacts if c.usable]
+    for ch in channels:
+        if ch == OutreachChannel.MANUAL:
+            if usable:
+                return usable[0], ch
+            continue
+        hit = next((c for c in usable if CHANNEL_FOR_TYPE.get(c.type) == ch), None)
+        if hit is not None:
+            return hit, ch
+    return None
+
+
+async def open_round(
+    db: AsyncSession,
+    workspace_id: int,
+    actor_id: int | None,
+    lead: Lead,
+    channel: Channel,
+    existing: Offer | None,
+    *,
+    gathered: GatheredInputs,
+    instructions: str,
+    model: AIModel,
+    prompt_template_id: int,
+    styles: Sequence[OfferStyle],
+    estimated_cost_usd: Decimal | None,
+    queue: JobQueue,
+    confirm_token: str,
+    channels: Sequence[OutreachChannel] | None = None,
+) -> tuple[Offer, list[ContactOut]]:
+    """A new offer (or a new round of ``existing``) with one pending variant per style and its generation
+    job; the confirmed cost is the job's hard cap. ``channels`` (campaigns) restricts the contact choice.
+    The caller holds the lead lock and has checked the confirmation."""
     if existing is None:
         offer = Offer(
             workspace_id=workspace_id,
             lead_id=lead.id,
             status=OfferStatus.DRAFT,
             round=1,
-            variant_count=body.variant_count,
-            language=plan.gathered.inputs.language,
+            variant_count=len(styles),
+            language=gathered.inputs.language,
             inputs={},
             created_by=actor_id,
         )
@@ -639,32 +718,35 @@ async def start_offer(
         await _close_interrupted(db, offer)
         move_offer(db, offer, OfferStatus.DRAFT, actor_id, "новый раунд генерации")
         offer.round += 1
-    inputs = plan.gathered.inputs
+    inputs = gathered.inputs
     offer.project_id = lead.created_from_project_id
-    offer.variant_count = body.variant_count
+    offer.variant_count = len(styles)
     offer.language = inputs.language
-    offer.instructions = body.instructions
+    offer.instructions = instructions
     offer.template_id = inputs.template.id if inputs.template is not None else None
     offer.inputs = inputs.model_dump(mode="json")
-    offer.attachment_variant_id = plan.gathered.attachment.variant_id if plan.gathered.attachment else None
+    offer.attachment_variant_id = gathered.attachment.variant_id if gathered.attachment else None
     offer.model_key = model.key
-    offer.prompt_template_id = plan.prompt_template_id
-    offer.estimated_cost_usd = est.estimated_cost_usd
+    offer.prompt_template_id = prompt_template_id
+    offer.estimated_cost_usd = estimated_cost_usd
     offer.error = None
     offer.scheduled_at = None
     offer.skipped_at = None
-    contacts = (await channel_contacts(db, workspace_id, channel.id)).items
-    _default_contact(offer, contacts)
-    for i in range(body.variant_count):
-        label, style = drafting.style_for(i)
-        db.add(OfferVariant(offer_id=offer.id, round=offer.round, label=label, style=style))
+    contacts = list((await channel_contacts(db, workspace_id, channel.id)).items)
+    picked = campaign_contact(contacts, channels) if channels is not None else None
+    if picked is not None:
+        offer.contact_id, offer.channel = picked[0].id, picked[1]
+    else:
+        _default_contact(offer, contacts)
+    for style in styles:
+        db.add(OfferVariant(offer_id=offer.id, round=offer.round, label=label_of(style), style=style))
     await db.flush()
     move_lead(db, lead, LeadStatus.OFFER_DRAFT, actor_id, REASON_START)
 
     enq = await enqueue_job(
         db,
         type_=JobType.OFFER_GENERATION,
-        queue=JobQueue.INTERACTIVE,
+        queue=queue,
         params={
             "offer_id": offer.id,
             "round": offer.round,
@@ -673,10 +755,10 @@ async def start_offer(
         },
         workspace_id=workspace_id,
         created_by=actor_id,
-        progress_total=body.variant_count,
+        progress_total=len(styles),
     )
-    enq.job.estimated_cost_usd = est.estimated_cost_usd
-    enq.job.budget_usd = est.estimated_cost_usd  # hard cap = what the owner confirmed
+    enq.job.estimated_cost_usd = estimated_cost_usd
+    enq.job.budget_usd = estimated_cost_usd  # hard cap = what the owner confirmed
     offer.job_run_id = enq.job.id
     await db.flush()
     await audit(
@@ -689,14 +771,14 @@ async def start_offer(
         diff={
             "lead_id": lead.id,
             "round": offer.round,
-            "variants": body.variant_count,
+            "variants": len(styles),
+            "styles": [s.value for s in styles],
             "model_key": model.key,
-            "estimated_cost_usd": str(est.estimated_cost_usd),
-            "confirm_token": body.confirm_token,
+            "estimated_cost_usd": str(estimated_cost_usd),
+            "confirm_token": confirm_token,
         },
     )
-    out = await offer_out(db, workspace_id, offer, lead_status=lead.status, contacts=contacts)
-    return OfferStartResult(offer=out, lead_status=lead.status)
+    return offer, contacts
 
 
 async def _close_interrupted(db: AsyncSession, offer: Offer) -> None:
@@ -863,9 +945,40 @@ async def offer_out(
         approval=_approval_out(latest, st.content_hash),
         email_account_id=offer.email_account_id,
         message=await _latest_message_out(db, offer.id),
+        campaign=await campaign_ref(db, offer.id),
         variants=[_variant_out(v) for v in st.variants],
         created_at=offer.created_at,
         updated_at=offer.updated_at,
+    )
+
+
+async def campaign_ref(db: AsyncSession, offer_id: int) -> OfferCampaignRef | None:
+    """The campaign the offer is in work in, else the latest one it was part of."""
+    row = (
+        (
+            await db.execute(
+                select(CampaignLead, Campaign)
+                .join(Campaign, Campaign.id == CampaignLead.campaign_id)
+                .where(CampaignLead.offer_id == offer_id)
+                .order_by(
+                    (CampaignLead.status == CampaignLeadStatus.ACTIVE).desc(), CampaignLead.created_at.desc()
+                )
+                .limit(1)
+            )
+        )
+        .tuples()
+        .first()
+    )
+    if row is None:
+        return None
+    cl, c = row
+    return OfferCampaignRef(
+        id=c.id,
+        name=c.name,
+        status=c.status,
+        style=cl.style,
+        label=label_of(cl.style),
+        active=cl.status == CampaignLeadStatus.ACTIVE,
     )
 
 
@@ -1335,13 +1448,23 @@ async def approval_queue(
     project_id: int | None,
     limit: int,
     offset: int,
+    campaign_id: int | None = None,
 ) -> ApprovalQueue:
-    """Offers of open leads in ``status``. Waiting offers: not skipped first, then by Priority Score."""
+    """Offers of open leads in ``status``. Waiting offers: not skipped first, then by Priority Score.
+    ``campaign_id`` — only the offers of that campaign's leads."""
     conds: list[ColumnElement[bool]] = [
         Offer.workspace_id == workspace_id,
         Offer.status == OfferStatus(status),
         Lead.status.not_in(list(CLOSED_LEAD)),
     ]
+    if campaign_id is not None:
+        conds.append(
+            exists(
+                select(CampaignLead.lead_id).where(
+                    CampaignLead.campaign_id == campaign_id, CampaignLead.offer_id == Offer.id
+                )
+            )
+        )
     if project_id is not None:
         conds.append(
             exists(

@@ -4,6 +4,7 @@ import { ImageOff } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { CampaignFilterChip } from "@/components/campaign-filter";
 import { OfferEditor } from "@/components/offer-editor";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { Badge, Card, PageHeader, Pager } from "@/components/ui";
@@ -13,13 +14,17 @@ import { CONTACT_TYPE_LABELS } from "@/lib/contacts";
 import { formatCount } from "@/lib/format";
 import { STATUS_LABELS, formatLeadScore, leadScoreTone } from "@/lib/leads";
 import { OFFER_STATUS_LABELS, QUEUE_TABS, type OfferStatus } from "@/lib/offers";
+import { intParam, useUrlState } from "@/lib/url-state";
 import { cn } from "@/lib/utils";
 
-/** ТЗ §22: every offer waits here for a human decision. Nothing is sent before «Подтвердить». */
+/** ТЗ §22: every offer waits here for a human decision. Nothing is sent before «Подтвердить».
+ * `?campaign_id=` — only the offers of that campaign (Phase 8.2). */
 export function ApprovalsView() {
   const [status, setStatus] = useState<OfferStatus>("pending_approval");
   const [offset, setOffset] = useState(0);
-  const queue = useApprovalQueue(status, offset);
+  const [params, setParams] = useUrlState();
+  const campaignId = intParam(params, "campaign_id");
+  const queue = useApprovalQueue(status, offset, campaignId);
   const counts = queue.data?.counts;
 
   return (
@@ -28,6 +33,15 @@ export function ApprovalsView() {
         title="Очередь подтверждения"
         subtitle="Офферы ждут вашего решения: подтвердить, поправить, перегенерировать, отклонить, пропустить или запланировать"
       />
+      {campaignId !== undefined ? (
+        <CampaignFilterChip
+          campaignId={campaignId}
+          onClear={() => {
+            setParams({ campaign_id: null });
+            setOffset(0);
+          }}
+        />
+      ) : null}
       <div role="tablist" aria-label="Статус офферов" className="mb-4 flex flex-wrap gap-1">
         {QUEUE_TABS.map((s) => (
           <button

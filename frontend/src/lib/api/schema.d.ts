@@ -1286,7 +1286,7 @@ export interface paths {
         /**
          * Approval Queue
          * @description ТЗ §22 cards: creator / channel, thumbnail, AI analysis, Lead Score, generated preview, offer draft,
-         *     contact channels.
+         *     contact channels. ``campaign_id`` — only that campaign's offers (Phase 8.2).
          */
         get: operations["approval_queue_api_approval_queue_get"];
         put?: never;
@@ -1543,6 +1543,244 @@ export interface paths {
          *     opt_out and bounced put the address on the suppression list.
          */
         post: operations["record_event_api_messages__message_id__events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Campaigns */
+        get: operations["list_campaigns_api_campaigns_get"];
+        put?: never;
+        /** Create Campaign */
+        post: operations["create_campaign_api_campaigns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Campaign */
+        get: operations["get_campaign_api_campaigns__campaign_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Campaign
+         * @description Until completed. New settings apply to what is queued / written next.
+         */
+        patch: operations["update_campaign_api_campaigns__campaign_id__patch"];
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Leads */
+        get: operations["list_leads_api_campaigns__campaign_id__leads_get"];
+        put?: never;
+        /**
+         * Add Leads
+         * @description «Add to campaign»: chosen leads or all filtered. Skipped: already here, active in another campaign,
+         *     closed or already contacted. Each new lead gets an A/B style (balanced, at random).
+         */
+        post: operations["add_leads_api_campaigns__campaign_id__leads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/leads/{lead_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Lead
+         * @description Its queued message (if any) is cancelled; the offer stays approved.
+         */
+        delete: operations["remove_lead_api_campaigns__campaign_id__leads__lead_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/offers/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estimate Offers
+         * @description Which leads get an offer now (one draft each in its A/B style), why others are skipped, price, budgets
+         *     and the ``confirm_token``. Nothing is generated or charged.
+         */
+        post: operations["estimate_offers_api_campaigns__campaign_id__offers_estimate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Offers
+         * @description Queue exactly the confirmed estimate (409 ``confirmation_required`` with a new token otherwise). The
+         *     drafts land in the Approval Queue.
+         */
+        post: operations["start_offers_api_campaigns__campaign_id__offers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stats
+         * @description A/B counts per style (ТЗ §28). No conclusions: see ``note`` and ``small_sample``.
+         */
+        get: operations["stats_api_campaigns__campaign_id__stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start
+         * @description Launch: from now on every offer of the campaign a human approves is queued and sent within the
+         *     window and limits. 409 ``campaign_not_ready`` with ``issues``.
+         */
+        post: operations["start_api_campaigns__campaign_id__start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause
+         * @description Queued messages wait (nothing is cancelled).
+         */
+        post: operations["pause_api_campaigns__campaign_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume */
+        post: operations["resume_api_campaigns__campaign_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete
+         * @description Queued messages are cancelled (offers stay approved); the remaining leads are released.
+         */
+        post: operations["complete_api_campaigns__campaign_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive */
+        post: operations["archive_api_campaigns__campaign_id__archive_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2183,6 +2421,376 @@ export interface components {
             /** Error */
             error: string;
         };
+        /** CampaignAccountRef */
+        CampaignAccountRef: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** From Email */
+            from_email: string;
+            /** Status */
+            status: string;
+        };
+        /**
+         * CampaignCounts
+         * @description Leads of the campaign by outcome and the stage of the active ones.
+         */
+        CampaignCounts: {
+            /** Leads */
+            leads: number;
+            /** Active */
+            active: number;
+            /** Sent */
+            sent: number;
+            /** Failed */
+            failed: number;
+            /** Rejected */
+            rejected: number;
+            /** Skipped */
+            skipped: number;
+            /** Removed */
+            removed: number;
+            /** Stages */
+            stages: {
+                [key: string]: number;
+            };
+            /** Replied */
+            replied: number;
+            /** Opted Out */
+            opted_out: number;
+        };
+        /** CampaignGenerationEstimate */
+        CampaignGenerationEstimate: {
+            /** Campaign Id */
+            campaign_id: number;
+            /** Lead Ids */
+            lead_ids: number[];
+            /** Styles */
+            styles: {
+                [key: string]: number;
+            };
+            /** Skipped */
+            skipped: {
+                [key: string]: number;
+            };
+            /** Remaining */
+            remaining: number;
+            /** Provider */
+            provider: string | null;
+            /** Model Key */
+            model_key: string | null;
+            /** Api Model Id */
+            api_model_id: string | null;
+            /** Cost Per Offer Usd */
+            cost_per_offer_usd: string | null;
+            /** Estimated Cost Usd */
+            estimated_cost_usd: string | null;
+            /** Pricing Verified */
+            pricing_verified: boolean;
+            /** Budgets */
+            budgets: components["schemas"]["BudgetCheckOut"][];
+            /** Within Budgets */
+            within_budgets: boolean;
+            /** Confirm Token */
+            confirm_token: string;
+        };
+        /** CampaignGenerationResult */
+        CampaignGenerationResult: {
+            campaign: components["schemas"]["CampaignOut"];
+            /** Started */
+            started: number;
+            /** Job Ids */
+            job_ids: number[];
+        };
+        /** CampaignGenerationStart */
+        CampaignGenerationStart: {
+            /** Confirm Token */
+            confirm_token: string;
+        };
+        /**
+         * CampaignIn
+         * @description ТЗ §29. ``styles`` — the A/B(/C) offer styles compared (each lead gets one, balanced);
+         *     ``channels`` — allowed channels in order of preference (manual = the operator sends it himself);
+         *     ``email_account_ids`` — senders (empty = any active account); window in ``timezone``.
+         */
+        CampaignIn: {
+            /** Name */
+            name: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Project Id */
+            project_id?: number | null;
+            /** Template Id */
+            template_id?: number | null;
+            /**
+             * Instructions
+             * @default
+             */
+            instructions: string;
+            /** Language */
+            language?: string | null;
+            /** Styles */
+            styles?: components["schemas"]["OfferStyle"][];
+            /** Channels */
+            channels?: components["schemas"]["OutreachChannel"][];
+            /** Email Account Ids */
+            email_account_ids?: number[];
+            /** Send Days */
+            send_days?: number[];
+            /**
+             * Send From
+             * Format: time
+             * @default 10:00:00
+             */
+            send_from: string;
+            /**
+             * Send To
+             * Format: time
+             * @default 18:00:00
+             */
+            send_to: string;
+            /**
+             * Timezone
+             * @default Europe/Moscow
+             */
+            timezone: string;
+            /** Starts At */
+            starts_at?: string | null;
+            /**
+             * Daily Limit
+             * @default 20
+             */
+            daily_limit: number;
+            /**
+             * Max Consecutive Failures
+             * @default 3
+             */
+            max_consecutive_failures: number;
+        };
+        /** CampaignLeadList */
+        CampaignLeadList: {
+            /** Items */
+            items: components["schemas"]["CampaignLeadOut"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** CampaignLeadOut */
+        CampaignLeadOut: {
+            /** Lead Id */
+            lead_id: number;
+            /** Channel Id */
+            channel_id: number;
+            /** Channel Title */
+            channel_title: string;
+            lead_status: components["schemas"]["LeadStatus"];
+            style: components["schemas"]["OfferStyle"];
+            /** Label */
+            label: string;
+            status: components["schemas"]["CampaignLeadStatus"];
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "no_offer" | "drafting" | "generation_failed" | "review" | "approved" | "queued" | "manual" | "send_cancelled" | "sent" | "replied" | "failed" | "rejected" | "skipped" | "removed";
+            /** Reason */
+            reason: string | null;
+            /** Offer Id */
+            offer_id: number | null;
+            offer_status: components["schemas"]["OfferStatus"] | null;
+            /** Message Id */
+            message_id: number | null;
+            message_status: components["schemas"]["MessageStatus"] | null;
+            /** Sent At */
+            sent_at: string | null;
+            /**
+             * Added At
+             * Format: date-time
+             */
+            added_at: string;
+        };
+        /**
+         * CampaignLeadStatus
+         * @enum {string}
+         */
+        CampaignLeadStatus: "active" | "sent" | "failed" | "rejected" | "skipped" | "removed";
+        /**
+         * CampaignLeadsIn
+         * @description «Add to campaign» (ТЗ §35): chosen leads or «all filtered» — like the leads bulk actions.
+         */
+        CampaignLeadsIn: {
+            selection: components["schemas"]["LeadSelection"];
+        };
+        /** CampaignLeadsResult */
+        CampaignLeadsResult: {
+            /** Matched */
+            matched: number;
+            /** Added */
+            added: number;
+            /** Skipped */
+            skipped: {
+                [key: string]: number;
+            };
+            /** Styles */
+            styles: {
+                [key: string]: number;
+            };
+        };
+        /** CampaignList */
+        CampaignList: {
+            /** Items */
+            items: components["schemas"]["CampaignOut"][];
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+        };
+        /** CampaignOut */
+        CampaignOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            status: components["schemas"]["CampaignStatus"];
+            /** Project Id */
+            project_id: number | null;
+            /** Project Name */
+            project_name: string | null;
+            /** Template Id */
+            template_id: number | null;
+            /** Template Name */
+            template_name: string | null;
+            /** Instructions */
+            instructions: string;
+            /** Language */
+            language: string | null;
+            /** Styles */
+            styles: components["schemas"]["OfferStyle"][];
+            /** Channels */
+            channels: components["schemas"]["OutreachChannel"][];
+            /** Email Accounts */
+            email_accounts: components["schemas"]["CampaignAccountRef"][];
+            /** Send Days */
+            send_days: number[];
+            /**
+             * Send From
+             * Format: time
+             */
+            send_from: string;
+            /**
+             * Send To
+             * Format: time
+             */
+            send_to: string;
+            /** Timezone */
+            timezone: string;
+            /** Starts At */
+            starts_at: string | null;
+            /** Daily Limit */
+            daily_limit: number;
+            /** Sent Today */
+            sent_today: number;
+            /** Max Consecutive Failures */
+            max_consecutive_failures: number;
+            /** Consecutive Failures */
+            consecutive_failures: number;
+            /** Paused Reason */
+            paused_reason: string | null;
+            /** In Window Now */
+            in_window_now: boolean;
+            /**
+             * Next Window At
+             * Format: date-time
+             */
+            next_window_at: string;
+            /** Issues */
+            issues: ("no_leads" | "email_account_required")[];
+            /** Target Filters */
+            target_filters: {
+                [key: string]: unknown;
+            };
+            counts: components["schemas"]["CampaignCounts"];
+            /** Started At */
+            started_at: string | null;
+            /** Completed At */
+            completed_at: string | null;
+            /** Archived At */
+            archived_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * CampaignPatch
+         * @description Only the fields sent change; ``email_account_ids`` replaces the list; ``starts_at`` = null clears.
+         */
+        CampaignPatch: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Project Id */
+            project_id?: number | null;
+            /** Template Id */
+            template_id?: number | null;
+            /** Instructions */
+            instructions?: string | null;
+            /** Language */
+            language?: string | null;
+            /** Styles */
+            styles?: components["schemas"]["OfferStyle"][] | null;
+            /** Channels */
+            channels?: components["schemas"]["OutreachChannel"][] | null;
+            /** Email Account Ids */
+            email_account_ids?: number[] | null;
+            /** Send Days */
+            send_days?: number[] | null;
+            /** Send From */
+            send_from?: string | null;
+            /** Send To */
+            send_to?: string | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Starts At */
+            starts_at?: string | null;
+            /** Daily Limit */
+            daily_limit?: number | null;
+            /** Max Consecutive Failures */
+            max_consecutive_failures?: number | null;
+        };
+        /** CampaignStats */
+        CampaignStats: {
+            /** Campaign Id */
+            campaign_id: number;
+            /** Variants */
+            variants: components["schemas"]["VariantStats"][];
+            /** Min Sample */
+            min_sample: number;
+            /** Note */
+            note: string;
+        };
+        /**
+         * CampaignStatus
+         * @description ADR-0011 / ТЗ §29.
+         * @enum {string}
+         */
+        CampaignStatus: "draft" | "ready" | "pending_approval" | "running" | "paused" | "completed" | "archived";
         /**
          * ChannelAggregates
          * @description Computed by code from the current thumbnail audits of the compared videos with the workspace's
@@ -4048,6 +4656,10 @@ export interface components {
             error_message: string | null;
             /** Events */
             events: components["schemas"]["MessageEventOut"][];
+            /** Campaign Id */
+            campaign_id?: number | null;
+            /** Campaign Name */
+            campaign_name?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -4086,6 +4698,22 @@ export interface components {
             name: string;
             /** Level */
             level: string;
+        };
+        /**
+         * OfferCampaignRef
+         * @description The campaign the offer belongs to (Phase 8.2): its A/B style and whether it still runs there.
+         */
+        OfferCampaignRef: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            status: components["schemas"]["CampaignStatus"];
+            style: components["schemas"]["OfferStyle"];
+            /** Label */
+            label: string;
+            /** Active */
+            active: boolean;
         };
         /**
          * OfferClaim
@@ -4290,6 +4918,7 @@ export interface components {
             /** Email Account Id */
             email_account_id: number | null;
             message: components["schemas"]["MessageOut"] | null;
+            campaign?: components["schemas"]["OfferCampaignRef"] | null;
             /** Variants */
             variants: components["schemas"]["OfferVariantOut"][];
             /**
@@ -5717,6 +6346,38 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** VariantStats */
+        VariantStats: {
+            style: components["schemas"]["OfferStyle"];
+            /** Label */
+            label: string;
+            /** Leads */
+            leads: number;
+            /** Approved */
+            approved: number;
+            /** Sent */
+            sent: number;
+            /** Delivered */
+            delivered: number;
+            /** Opened */
+            opened: number;
+            /** Replied */
+            replied: number;
+            /** Positive Reply */
+            positive_reply: number;
+            /** Negative Reply */
+            negative_reply: number;
+            /** No Reply */
+            no_reply: number;
+            /** Bounced */
+            bounced: number;
+            /** Opt Out */
+            opt_out: number;
+            /** Reply Rate */
+            reply_rate: string | null;
+            /** Small Sample */
+            small_sample: boolean;
         };
         /**
          * VariantStatus
@@ -8451,6 +9112,7 @@ export interface operations {
             query?: {
                 status?: "pending_approval" | "approved" | "scheduled" | "sent" | "draft" | "rejected" | "failed";
                 project_id?: number | null;
+                campaign_id?: number | null;
                 limit?: number;
                 offset?: number;
             };
@@ -8818,6 +9480,7 @@ export interface operations {
             query?: {
                 status?: components["schemas"]["MessageStatus"] | null;
                 lead_id?: number | null;
+                campaign_id?: number | null;
                 limit?: number;
                 offset?: number;
             };
@@ -8966,6 +9629,491 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_campaigns_api_campaigns_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["CampaignStatus"] | null;
+                include_archived?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_campaign_api_campaigns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_campaign_api_campaigns__campaign_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_campaign_api_campaigns__campaign_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_leads_api_campaigns__campaign_id__leads_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["CampaignLeadStatus"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                campaign_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignLeadList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_leads_api_campaigns__campaign_id__leads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignLeadsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignLeadsResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_lead_api_campaigns__campaign_id__leads__lead_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: number;
+                lead_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    estimate_offers_api_campaigns__campaign_id__offers_estimate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignGenerationEstimate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_offers_api_campaigns__campaign_id__offers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignGenerationStart"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignGenerationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stats_api_campaigns__campaign_id__stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignStats"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_api_campaigns__campaign_id__start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_api_campaigns__campaign_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_api_campaigns__campaign_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_api_campaigns__campaign_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_api_campaigns__campaign_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignOut"];
                 };
             };
             /** @description Validation Error */

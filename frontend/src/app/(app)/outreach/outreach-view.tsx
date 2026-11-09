@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { CampaignFilterChip } from "@/components/campaign-filter";
 import { MessagePanel } from "@/components/outreach-message";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { Card, PageHeader, Pager } from "@/components/ui";
 import { MESSAGES_PAGE, useMessages } from "@/lib/api/outreach-hooks";
 import { MESSAGE_STATUS_LABELS, MESSAGE_TABS, type MessageStatus } from "@/lib/outreach";
+import { intParam, useUrlState } from "@/lib/url-state";
 import { cn } from "@/lib/utils";
 
 const EMPTY_HINT: Partial<Record<MessageStatus, string>> = {
@@ -20,7 +22,9 @@ const EMPTY_HINT: Partial<Record<MessageStatus, string>> = {
 export function OutreachView() {
   const [status, setStatus] = useState<MessageStatus>("queued");
   const [offset, setOffset] = useState(0);
-  const list = useMessages({ status, offset });
+  const [params, setParams] = useUrlState();
+  const campaignId = intParam(params, "campaign_id");
+  const list = useMessages({ status, offset, campaign_id: campaignId });
   const counts = list.data?.counts;
 
   return (
@@ -34,6 +38,15 @@ export function OutreachView() {
           </Link>
         }
       />
+      {campaignId !== undefined ? (
+        <CampaignFilterChip
+          campaignId={campaignId}
+          onClear={() => {
+            setParams({ campaign_id: null });
+            setOffset(0);
+          }}
+        />
+      ) : null}
       <div role="tablist" aria-label="Статус сообщений" className="mb-4 flex flex-wrap gap-1">
         {MESSAGE_TABS.map((s) => (
           <button
