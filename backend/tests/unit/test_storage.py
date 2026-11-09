@@ -24,7 +24,17 @@ def test_delete_is_idempotent(tmp_path):
     assert not s.exists(key)
 
 
-@pytest.mark.parametrize("key", ["../outside.txt", "images/../../outside.txt", "C:/Windows/win.ini"])
+@pytest.mark.parametrize(
+    "key",
+    [
+        "../outside.txt",
+        "images/../../outside.txt",
+        "C:/Windows/win.ini",
+        "/etc/passwd",
+        "images\\..\\..\\outside.txt",
+        "",
+    ],
+)
 def test_keys_cannot_escape_root(tmp_path, key):
     s = LocalFSStorage(tmp_path / "root")
     with pytest.raises(ValueError):

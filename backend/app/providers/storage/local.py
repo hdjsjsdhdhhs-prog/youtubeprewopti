@@ -17,6 +17,11 @@ class LocalFSStorage:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, key: str) -> Path:
+        # Keys are relative POSIX paths (images/ab/<sha>.ext). Reject absolute paths, drive letters,
+        # backslashes and NULs up front so the check does not depend on the host OS: on Linux
+        # "C:/x" is a plain relative name, on Windows "/x" or "\\x" is rooted.
+        if not key or key.startswith("/") or any(c in key for c in ("\\", ":", "\x00")):
+            raise ValueError("storage key escapes storage root")
         p = (self.root / key).resolve()
         # Prevent path traversal via crafted keys
         if self.root != p and self.root not in p.parents:
