@@ -17,6 +17,7 @@ from app.api.errors import install_error_handlers
 from app.api.routes import (
     ai,
     analysis,
+    analytics,
     auth,
     campaigns,
     contacts,
@@ -60,7 +61,7 @@ def create_app() -> FastAPI:
 
     for module in (
         auth, projects, taxonomy, discovery, youtube, media, analysis, scoring, leads, tags, favorites,
-        feedback, generation, contacts, offers, outreach, campaigns, ai, jobs,
+        feedback, generation, contacts, offers, outreach, campaigns, analytics, ai, jobs,
     ):
         api.include_router(module.router)
     api.include_router(analysis.channel_router)

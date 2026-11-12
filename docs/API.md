@@ -634,6 +634,70 @@ backoff до `YTL_OUTREACH_MAX_ATTEMPTS`), `→ failed`; `queued / manual → ca
   (`OfferCampaignRef {id, name, status, style, label, active}`), `MessageOut.campaign_id` / `campaign_name`; результат
   диспетчера — ключ `campaign_waiting`.
 
+### Аналитика (Phase 9, ТЗ §87; §28, §39, §46, §51, §75)
+
+Только чтение (viewer+), ничего не хранится: агрегаты считаются при запросе из таблиц других доменов (`domains/
+analytics`). Все эндпоинты принимают `date_from`, `date_to` (даты включительно, UTC; 400 `invalid_period`, если
+`date_from > date_to`) и `project_id` (404, если проект не этого workspace). Что значит период:
+
+* **лиды** (плитки, воронка, ниши, диапазоны балла) — найденные за период (`leads.created_at`) и их *текущее*
+  состояние; с проектом — каналы проекта (`project_channels`);
+* **письма** (кампании, A/B) — отправленные за период (`messages.sent_at`, статус `sent`);
+* **расходы** — вызовы AI за период (`ai_calls.created_at`, с проектом — `ai_calls.project_id`);
+* **решения** (AI feedback) — принятые за период.
+
+Этап лида (вложенные уровни): найден → проанализирован → (шорт-лист) → выбран → оффер написан → подтверждён — по
+текущему статусу и истории статусов (`lead_status_history`; `rejected` / `failed` / `opted_out` прогресс не
+стирают); отправлен / ответил / положительный ответ — по отправленным сообщениям и их событиям (статус `declined`
+тоже считается ответом). Без отправленного сообщения лид не может быть дальше «подтверждён». Сравнение групп —
+по доле ответов (`replied / sent`); группа с отправленными < `min_sample` (= 30) не ранжируется (`small_sample`,
+`best = null` — «мало данных»).
+
+`Outcomes {sent, delivered, opened, replied, positive_reply, negative_reply, bounced, opt_out, no_reply, reply_rate,
+positive_rate, small_sample}`: события после отправки отмечает оператор (SMTP о них не сообщает); `opened` — только
+отмеченное вручную, пикселя отслеживания нет (ADR-0010).
+
+- `GET /api/analytics/overview` → `Overview {period, tiles {total_channels (всё время), new_channels, analyzed,
+  selected, generated_samples (лидов с образцом), offers_pending_approval (сейчас), sent, replies, positive_replies,
+  reply_rate, conversion (= положительные / отправлено)}, funnel: FunnelStep[] {key (found, analyzed, selected,
+  offer, approved, sent, replied, positive), label, leads, rate_from_previous, rate_from_start}, costs:
+  CostSummary, best_niche, best_score_range, best_campaign, best_offer_variant (Best {key, name, sent, reply_rate} |
+  null), min_sample, notes[]}` — главный dashboard (ТЗ §39).
+- `GET /api/analytics/costs` → `CostReport {summary: CostSummary {total_usd, analysis_usd (аудиты превью / каналов,
+  классификация, объяснения), generation_usd, offers_usd, other_usd, calls, unpriced_calls, per_lead_usd,
+  per_analyzed_lead_usd, per_sent_usd, per_reply_usd, per_positive_usd}, by_task: CostRow[], by_model: CostRow[]
+  (дороже — выше)}`; `CostRow {key, provider (у моделей), calls, failed_calls (error / invalid_output / refused),
+  unpriced_calls, cost_usd, input_tokens, output_tokens, image_inputs, image_outputs, avg_duration_ms}`. Сумма — как в
+  бюджетах: фактическая стоимость, иначе оценка; вызовы без обеих не входят (сумма — нижняя граница). «На лид» —
+  делится на лидов, найденных за тот же период (ТЗ §75).
+- `GET /api/analytics/niches` → `NicheReport {items: NicheRow[] {niche_id (null = «Без ниши»), name, leads, analyzed,
+  selected, avg_thumbnail_score, weak_thumbnails (< 5, как тег weak-thumbnails), high_opportunity (Lead Score ≥ 60,
+  как high-potential), with_contacts (пригодный контакт), outcomes (по лидам, которым написали)}, best, min_sample,
+  note}` — ниша верхнего уровня запросов, которыми нашёлся канал (тема / подтема считается за свою нишу); лид
+  входит в каждую свою нишу (ТЗ §51).
+- `GET /api/analytics/score-ranges` → `ScoreRangeReport {items: ScoreRangeRow[] {key (1-3, 3-4, 4-5, 5-6, 6-7, 7-8,
+  8-10, none), label, low, high, leads, selected, selection_rate, outcomes}, best, min_sample, note}` — по среднему
+  баллу превью канала (`lead_scores.avg_thumbnail_score`, ручные оценки учитываются).
+- `GET /api/analytics/campaigns` → `CampaignReport {items: CampaignRow[] {id, name, status, leads (без убранных),
+  approved, cost_usd (тексты офферов лидов кампании), cost_per_reply_usd, outcomes (по письмам)}, best, min_sample,
+  note}`; с проектом — кампании этого проекта.
+- `GET /api/analytics/ab?dimension=style|attachment|channel&campaign_id` → `ABReport {dimension, campaign_id,
+  groups: ABGroup[] {key, label, style, outcomes}, verdict, leader, p_value, min_sample, note}` — по всем отправленным
+  письмам (или одной кампании; 404 — чужая / нет). Стиль — по отправленному варианту оффера (все три стиля
+  показываются всегда; `unknown` — вариант удалён); вложение — с образцом превью или без; канал — email / telegram /
+  vk / manual. `verdict`: `insufficient_data` — меньше двух групп с `min_sample` отправленных; `no_difference` —
+  разница двух лучших в пределах случайности (z-тест двух долей, p ≥ 0,05; `leader` — кто впереди, только для
+  показа); `leader` — доля ответов лучшей группы выше не случайно. Причинность не утверждается (ТЗ §28). Измерения
+  subject / body / CTA по отдельности не выделяются: вариант отличается стилем целиком.
+- `GET /api/analytics/ai-feedback` → `AIFeedbackReport {generation_by_strategy, generation_by_model:
+  GenerationFeedbackRow[] {key, generated, approved (approved + final), final, rejected, undecided, approval_rate},
+  offers_by_style: OfferFeedbackRow[] {style, label, approve, reject, skip, approval_rate,
+  avg_personalization_approved, avg_personalization_rejected, edits, edited_offers}, lead_decisions_by_score:
+  LeadScoreBand[] {key (0-20 … 80-100), label, low, high, selected (шорт-лист / выбор), rejected, selection_rate},
+  scores: FeedbackSummary (как `GET /api/feedback/summary`, всё время)}` — AI / код против решения человека (ТЗ §46):
+  какие стратегии превью я одобряю, какие стили офферов подтверждаю и правлю, при каком Lead Score выбираю и
+  отклоняю лиды.
+
 ### AI: реестр моделей, расходы и бюджеты (Phase 3.3–3.4)
 
 `GET /api/ai/status` → `{"provider": "openai"|"mock"|null, "configured", "models": [AIModelOut]}`. Реестр

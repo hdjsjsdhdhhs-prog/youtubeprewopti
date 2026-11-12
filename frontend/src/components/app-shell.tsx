@@ -2,10 +2,12 @@
 
 import {
   Ban,
+  ChartColumn,
   FileText,
   FolderKanban,
   Images,
   Inbox,
+  LayoutDashboard,
   ListChecks,
   LogOut,
   Mail,
@@ -27,6 +29,7 @@ import { useLogout } from "@/lib/api/hooks";
 import { cn } from "@/lib/utils";
 
 const NAV = [
+  { href: "/", label: "Дашборд", icon: LayoutDashboard, key: "d" },
   { href: "/projects", label: "Проекты", icon: FolderKanban, key: "p" },
   { href: "/channels", label: "Каналы", icon: Tv, key: "c" },
   { href: "/leads", label: "Лиды", icon: Target, key: "l" },
@@ -39,6 +42,7 @@ const NAV = [
   { href: "/tags", label: "Теги", icon: Tags, key: "t" },
   { href: "/references", label: "Референсы", icon: Images, key: "r" },
   { href: "/suppression", label: "Не писать", icon: Ban, key: "s" },
+  { href: "/analytics", label: "Аналитика", icon: ChartColumn, key: "i" },
   { href: "/feedback", label: "AI vs человек", icon: Scale, key: "a" },
   { href: "/niches", label: "Ниши", icon: Network, key: "n" },
   { href: "/jobs", label: "Задачи", icon: ListChecks, key: "j" },
@@ -91,7 +95,7 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
         </div>
         <nav aria-label="Основная навигация" className="flex-1 space-y-0.5 px-2">
           {NAV.map(({ href, label, icon: Icon, key }) => {
-            const active = pathname === href || pathname.startsWith(`${href}/`);
+            const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
             return (
               <Link
                 key={href}

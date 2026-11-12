@@ -8,21 +8,24 @@ import { countQueryLines, parseProjectForm } from "./forms";
 import { loginHref, safeNext } from "./navigation";
 
 describe("safeNext (post-login redirect)", () => {
+  // the dashboard ("/") is the home page since Phase 9
   it.each([
-    [null, "/projects"],
-    ["", "/projects"],
+    [null, "/"],
+    ["", "/"],
     ["/channels?q=a", "/channels?q=a"],
-    ["https://evil.example", "/projects"],
-    ["//evil.example", "/projects"],
-    ["/\\evil.example", "/projects"],
-    ["/login?next=/x", "/projects"],
+    ["/projects", "/projects"],
+    ["https://evil.example", "/"],
+    ["//evil.example", "/"],
+    ["/\\evil.example", "/"],
+    ["/login?next=/x", "/"],
   ])("%s -> %s", (input, expected) => {
     expect(safeNext(input)).toBe(expected);
   });
 
   it("encodes the target into the login href", () => {
     expect(loginHref("/channels?q=a b")).toBe("/login?next=%2Fchannels%3Fq%3Da%20b");
-    expect(loginHref("/projects")).toBe("/login");
+    expect(loginHref("/projects")).toBe("/login?next=%2Fprojects");
+    expect(loginHref("/")).toBe("/login");
   });
 });
 

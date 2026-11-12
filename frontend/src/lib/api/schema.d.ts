@@ -1787,6 +1787,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/analytics/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Overview
+         * @description Dashboard (ТЗ §39): tiles, the lead funnel, AI spend and the best niche / thumbnail score range /
+         *     campaign / offer variant (only groups with at least ``min_sample`` sent are ranked).
+         */
+        get: operations["overview_api_analytics_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analytics/costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Costs
+         * @description AI spend by task and model, cost per lead / sent / reply (ТЗ §75).
+         */
+        get: operations["costs_api_analytics_costs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analytics/niches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Niches
+         * @description Which niches give more leads, weaker thumbnails, high-opportunity channels, contacts and replies
+         *     (ТЗ §51).
+         */
+        get: operations["niches_api_analytics_niches_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analytics/score-ranges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Score Ranges
+         * @description Leads by the channel's average thumbnail score: how many were selected and answered (ТЗ §39).
+         */
+        get: operations["score_ranges_api_analytics_score_ranges_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analytics/campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Campaigns
+         * @description Campaigns side by side: leads, approved offers, outcomes of the messages sent, cost (ТЗ §29).
+         */
+        get: operations["campaigns_api_analytics_campaigns_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analytics/ab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ab
+         * @description A/B over every sent message (or one campaign's) by offer style, attachment or channel (ТЗ §28). A
+         *     leader is named only with enough data and a difference beyond chance.
+         */
+        get: operations["ab_api_analytics_ab_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analytics/ai-feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ai Feedback
+         * @description AI recommendation vs human decision (ТЗ §46): generated variants by strategy / model, offer decisions
+         *     and edits by style, manual lead decisions by Lead Score, score corrections.
+         */
+        get: operations["ai_feedback_api_analytics_ai_feedback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/status": {
         parameters: {
             query?: never;
@@ -2025,6 +2169,54 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ABGroup */
+        ABGroup: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            style?: components["schemas"]["OfferStyle"] | null;
+            outcomes: components["schemas"]["Outcomes"];
+        };
+        /** ABReport */
+        ABReport: {
+            period: components["schemas"]["PeriodOut"];
+            /**
+             * Dimension
+             * @enum {string}
+             */
+            dimension: "style" | "attachment" | "channel";
+            /** Campaign Id */
+            campaign_id: number | null;
+            /** Groups */
+            groups: components["schemas"]["ABGroup"][];
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "insufficient_data" | "no_difference" | "leader";
+            /** Leader */
+            leader: string | null;
+            /** P Value */
+            p_value: string | null;
+            /** Min Sample */
+            min_sample: number;
+            /** Note */
+            note: string;
+        };
+        /** AIFeedbackReport */
+        AIFeedbackReport: {
+            period: components["schemas"]["PeriodOut"];
+            /** Generation By Strategy */
+            generation_by_strategy: components["schemas"]["GenerationFeedbackRow"][];
+            /** Generation By Model */
+            generation_by_model: components["schemas"]["GenerationFeedbackRow"][];
+            /** Offers By Style */
+            offers_by_style: components["schemas"]["OfferFeedbackRow"][];
+            /** Lead Decisions By Score */
+            lead_decisions_by_score: components["schemas"]["LeadScoreBand"][];
+            scores: components["schemas"]["FeedbackSummary"];
+        };
         /** AIModelOut */
         AIModelOut: {
             /** Key */
@@ -2292,6 +2484,20 @@ export interface components {
             action: string;
             /** Rationale */
             rationale: string;
+        };
+        /**
+         * Best
+         * @description The top group by reply rate among those with at least ``min_sample`` sent (a ranking, not a cause).
+         */
+        Best: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Sent */
+            sent: number;
+            /** Reply Rate */
+            reply_rate: string | null;
         };
         /** BriefFix */
         BriefFix: {
@@ -2773,6 +2979,34 @@ export interface components {
             daily_limit?: number | null;
             /** Max Consecutive Failures */
             max_consecutive_failures?: number | null;
+        };
+        /** CampaignReport */
+        CampaignReport: {
+            period: components["schemas"]["PeriodOut"];
+            /** Items */
+            items: components["schemas"]["CampaignRow"][];
+            best: components["schemas"]["Best"] | null;
+            /** Min Sample */
+            min_sample: number;
+            /** Note */
+            note: string;
+        };
+        /** CampaignRow */
+        CampaignRow: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            status: components["schemas"]["CampaignStatus"];
+            /** Leads */
+            leads: number;
+            /** Approved */
+            approved: number;
+            /** Cost Usd */
+            cost_usd: string;
+            /** Cost Per Reply Usd */
+            cost_per_reply_usd: string | null;
+            outcomes: components["schemas"]["Outcomes"];
         };
         /** CampaignStats */
         CampaignStats: {
@@ -3399,6 +3633,70 @@ export interface components {
              */
             other: number;
         };
+        /** CostReport */
+        CostReport: {
+            period: components["schemas"]["PeriodOut"];
+            summary: components["schemas"]["CostSummary"];
+            /** By Task */
+            by_task: components["schemas"]["CostRow"][];
+            /** By Model */
+            by_model: components["schemas"]["CostRow"][];
+        };
+        /** CostRow */
+        CostRow: {
+            /** Key */
+            key: string;
+            /** Provider */
+            provider?: string | null;
+            /** Calls */
+            calls: number;
+            /** Failed Calls */
+            failed_calls: number;
+            /** Unpriced Calls */
+            unpriced_calls: number;
+            /** Cost Usd */
+            cost_usd: string;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Image Inputs */
+            image_inputs: number;
+            /** Image Outputs */
+            image_outputs: number;
+            /** Avg Duration Ms */
+            avg_duration_ms: number | null;
+        };
+        /**
+         * CostSummary
+         * @description AI spend (ТЗ §75): Σ actual cost, the estimate where the actual is unknown (as in budgets).
+         */
+        CostSummary: {
+            /** Total Usd */
+            total_usd: string;
+            /** Analysis Usd */
+            analysis_usd: string;
+            /** Generation Usd */
+            generation_usd: string;
+            /** Offers Usd */
+            offers_usd: string;
+            /** Other Usd */
+            other_usd: string;
+            /** Calls */
+            calls: number;
+            /** Unpriced Calls */
+            unpriced_calls: number;
+            /** Per Lead Usd */
+            per_lead_usd: string | null;
+            /** Per Analyzed Lead Usd */
+            per_analyzed_lead_usd: string | null;
+            /** Per Sent Usd */
+            per_sent_usd: string | null;
+            /** Per Reply Usd */
+            per_reply_usd: string | null;
+            /** Per Positive Usd */
+            per_positive_usd: string | null;
+        };
         /**
          * DecisionStats
          * @description Manual lead decisions and the Lead Score the code gave the lead at that moment.
@@ -3712,6 +4010,19 @@ export interface components {
          * @enum {string}
          */
         FetchStatus: "pending" | "ok" | "failed";
+        /** FunnelStep */
+        FunnelStep: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Leads */
+            leads: number;
+            /** Rate From Previous */
+            rate_from_previous: string | null;
+            /** Rate From Start */
+            rate_from_start: string | null;
+        };
         /**
          * GenerationBrief
          * @description Stored on the request (``generation_requests.brief``): exactly the data the prompts were built from.
@@ -3772,6 +4083,23 @@ export interface components {
             within_budgets: boolean;
             /** Confirm Token */
             confirm_token: string;
+        };
+        /** GenerationFeedbackRow */
+        GenerationFeedbackRow: {
+            /** Key */
+            key: string;
+            /** Generated */
+            generated: number;
+            /** Approved */
+            approved: number;
+            /** Final */
+            final: number;
+            /** Rejected */
+            rejected: number;
+            /** Undecided */
+            undecided: number;
+            /** Approval Rate */
+            approval_rate: string | null;
         };
         /**
          * GenerationIn
@@ -4334,6 +4662,23 @@ export interface components {
             weights: components["schemas"]["LeadWeights"];
             rescored: components["schemas"]["RescoreResult"];
         };
+        /** LeadScoreBand */
+        LeadScoreBand: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Low */
+            low: string;
+            /** High */
+            high: string;
+            /** Selected */
+            selected: number;
+            /** Rejected */
+            rejected: number;
+            /** Selection Rate */
+            selection_rate: string | null;
+        };
         /** LeadScoreHistoryItem */
         LeadScoreHistoryItem: {
             /** Total */
@@ -4699,6 +5044,39 @@ export interface components {
             /** Level */
             level: string;
         };
+        /** NicheReport */
+        NicheReport: {
+            period: components["schemas"]["PeriodOut"];
+            /** Items */
+            items: components["schemas"]["NicheRow"][];
+            best: components["schemas"]["Best"] | null;
+            /** Min Sample */
+            min_sample: number;
+            /** Note */
+            note: string;
+        };
+        /** NicheRow */
+        NicheRow: {
+            /** Niche Id */
+            niche_id: number | null;
+            /** Name */
+            name: string;
+            /** Leads */
+            leads: number;
+            /** Analyzed */
+            analyzed: number;
+            /** Selected */
+            selected: number;
+            /** Avg Thumbnail Score */
+            avg_thumbnail_score: string | null;
+            /** Weak Thumbnails */
+            weak_thumbnails: number;
+            /** High Opportunity */
+            high_opportunity: number;
+            /** With Contacts */
+            with_contacts: number;
+            outcomes: components["schemas"]["Outcomes"];
+        };
         /**
          * OfferCampaignRef
          * @description The campaign the offer belongs to (Phase 8.2): its A/B style and whether it still runs there.
@@ -4819,6 +5197,28 @@ export interface components {
             ref?: {
                 [key: string]: number;
             };
+        };
+        /** OfferFeedbackRow */
+        OfferFeedbackRow: {
+            style: components["schemas"]["OfferStyle"] | null;
+            /** Label */
+            label: string;
+            /** Approve */
+            approve: number;
+            /** Reject */
+            reject: number;
+            /** Skip */
+            skip: number;
+            /** Approval Rate */
+            approval_rate: string | null;
+            /** Avg Personalization Approved */
+            avg_personalization_approved: string | null;
+            /** Avg Personalization Rejected */
+            avg_personalization_rejected: string | null;
+            /** Edits */
+            edits: number;
+            /** Edited Offers */
+            edited_offers: number;
         };
         /**
          * OfferIn
@@ -5108,6 +5508,37 @@ export interface components {
          */
         OfferVariantStatus: "pending" | "ready" | "failed" | "refused";
         /**
+         * Outcomes
+         * @description What happened after sending (ТЗ §28). Events after the send are recorded by the operator (SMTP reports
+         *     none of them); «opened» is only what was marked by hand — there is no tracking pixel (ADR-0010).
+         */
+        Outcomes: {
+            /** Sent */
+            sent: number;
+            /** Delivered */
+            delivered: number;
+            /** Opened */
+            opened: number;
+            /** Replied */
+            replied: number;
+            /** Positive Reply */
+            positive_reply: number;
+            /** Negative Reply */
+            negative_reply: number;
+            /** Bounced */
+            bounced: number;
+            /** Opt Out */
+            opt_out: number;
+            /** No Reply */
+            no_reply: number;
+            /** Reply Rate */
+            reply_rate: string | null;
+            /** Positive Rate */
+            positive_rate: string | null;
+            /** Small Sample */
+            small_sample: boolean;
+        };
+        /**
          * OutreachChannel
          * @description How the offer will be sent (ТЗ §23 «канал отправки»). ``manual`` = the operator sends it himself
          *     (ADR-0010 ManualSendProvider) — possible with any contact type.
@@ -5138,6 +5569,22 @@ export interface components {
             ai_overestimates: number;
             /** Ai Underestimates */
             ai_underestimates: number;
+        };
+        /** Overview */
+        Overview: {
+            period: components["schemas"]["PeriodOut"];
+            tiles: components["schemas"]["Tiles"];
+            /** Funnel */
+            funnel: components["schemas"]["FunnelStep"][];
+            costs: components["schemas"]["CostSummary"];
+            best_niche: components["schemas"]["Best"] | null;
+            best_score_range: components["schemas"]["Best"] | null;
+            best_campaign: components["schemas"]["Best"] | null;
+            best_offer_variant: components["schemas"]["Best"] | null;
+            /** Min Sample */
+            min_sample: number;
+            /** Notes */
+            notes: string[];
         };
         /** Page[ChannelOut] */
         Page_ChannelOut_: {
@@ -5203,6 +5650,15 @@ export interface components {
             pattern: string;
             /** Evidence */
             evidence: string;
+        };
+        /** PeriodOut */
+        PeriodOut: {
+            /** Date From */
+            date_from: string | null;
+            /** Date To */
+            date_to: string | null;
+            /** Project Id */
+            project_id: number | null;
         };
         /** PersonalizationSource */
         PersonalizationSource: {
@@ -5795,6 +6251,35 @@ export interface components {
             updated_at: string;
             rescored: components["schemas"]["RescoreResult"] | null;
         };
+        /** ScoreRangeReport */
+        ScoreRangeReport: {
+            period: components["schemas"]["PeriodOut"];
+            /** Items */
+            items: components["schemas"]["ScoreRangeRow"][];
+            best: components["schemas"]["Best"] | null;
+            /** Min Sample */
+            min_sample: number;
+            /** Note */
+            note: string;
+        };
+        /** ScoreRangeRow */
+        ScoreRangeRow: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Low */
+            low: string | null;
+            /** High */
+            high: string | null;
+            /** Leads */
+            leads: number;
+            /** Selected */
+            selected: number;
+            /** Selection Rate */
+            selection_rate: string | null;
+            outcomes: components["schemas"]["Outcomes"];
+        };
         /**
          * ScoreTarget
          * @enum {string}
@@ -6261,6 +6746,31 @@ export interface components {
              * @default 0
              */
             redesign_potential: number;
+        };
+        /** Tiles */
+        Tiles: {
+            /** Total Channels */
+            total_channels: number;
+            /** New Channels */
+            new_channels: number;
+            /** Analyzed */
+            analyzed: number;
+            /** Selected */
+            selected: number;
+            /** Generated Samples */
+            generated_samples: number;
+            /** Offers Pending Approval */
+            offers_pending_approval: number;
+            /** Sent */
+            sent: number;
+            /** Replies */
+            replies: number;
+            /** Positive Replies */
+            positive_replies: number;
+            /** Reply Rate */
+            reply_rate: string | null;
+            /** Conversion */
+            conversion: string | null;
         };
         /** UserOut */
         UserOut: {
@@ -10114,6 +10624,239 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CampaignOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_api_analytics_overview_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                project_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Overview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    costs_api_analytics_costs_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                project_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    niches_api_analytics_niches_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                project_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NicheReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    score_ranges_api_analytics_score_ranges_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                project_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoreRangeReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    campaigns_api_analytics_campaigns_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                project_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ab_api_analytics_ab_get: {
+        parameters: {
+            query?: {
+                dimension?: "style" | "attachment" | "channel";
+                campaign_id?: number | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                project_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ABReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_feedback_api_analytics_ai_feedback_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                project_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIFeedbackReport"];
                 };
             };
             /** @description Validation Error */
